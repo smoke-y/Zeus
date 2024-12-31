@@ -88,6 +88,6 @@ s32 main(s32 argc, char **argv){
         for(u32 x=0; x<scopeOff; x++) scopeAllocMem[x].uninit();
         scopeOff = 0;
     };
-    lowerToRISCV(outputPath, globals);
+    lowerToLLVM(outputPath, globals);
     return EXIT_SUCCESS;
 };

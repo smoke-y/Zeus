@@ -24,3 +24,4 @@
 #include "checker.cc"
 
 #include "riscvAsm.cc"
+#include "llvm.cc"

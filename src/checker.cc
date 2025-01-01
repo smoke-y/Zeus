@@ -29,9 +29,11 @@ struct Scope{
     DynamicArray<VariableEntity*> vars;
     DynamicArray<ProcEntity*> procs;
     ScopeType type;
+    u32 varId;
 
-    void init(ScopeType stype){
+    void init(ScopeType stype, u32 id){
         type = stype;
+        varId = id;
         var.init();
         vars.init();
         proc.init();
@@ -328,7 +330,7 @@ u64 checkDecl(Lexer &lexer, ASTAssDecl *assdecl, DynamicArray<Scope*> &scopes){
             }break;
             default: return 0;
         };
-        u32 id = scope->vars.count - 1;
+        u32 id = scope->varId++;
         scope->var.insertValue(name, id);
         entity->pointerDepth = typePointerDepth;
         entity->type = typeType;
@@ -341,11 +343,13 @@ u64 checkDecl(Lexer &lexer, ASTAssDecl *assdecl, DynamicArray<Scope*> &scopes){
 bool checkASTNode(Lexer &lexer, ASTBase *node, DynamicArray<Scope*> &scopes){
     BRING_TOKENS_TO_SCOPE;
     Scope *scope = scopes[scopes.count-1];
+    u32 newId = scope->varId;
+    DEFER(scope->varId = newId);
     switch(node->type){
         case ASTType::FOR:{
             ASTFor *For = (ASTFor*)node;
             Scope *body = &scopeAllocMem[scopeOff++];
-            body->init(ScopeType::BLOCK);
+            body->init(ScopeType::BLOCK, scope->varId);
             if(For->initializer != nullptr){
                 //c-for
                 bool found = false;
@@ -390,7 +394,8 @@ bool checkASTNode(Lexer &lexer, ASTBase *node, DynamicArray<Scope*> &scopes){
                 if(For->type){
                     if(!fillTypeInfo(lexer, For->type)) return false;
                 };
-                body->var.insertValue(For->iter, body->vars.count);
+                u32 id = body->varId++;
+                body->var.insertValue(For->iter, id);
                 VariableEntity *entity = (VariableEntity*)mem::alloc(sizeof(VariableEntity));
                 entity->type = initializerType;
                 if(initializerPointerDepth > 0) entity->size = 64;
@@ -399,7 +404,7 @@ bool checkASTNode(Lexer &lexer, ASTBase *node, DynamicArray<Scope*> &scopes){
                     return false;
                 }else entity->size = getSize(lexer, initializerType, For->tokenOff);
                 entity->pointerDepth = initializerPointerDepth;
-                entity->id = body->var.count - 1;
+                entity->id = id;
                 For->entity = entity;
                 body->vars.push(entity);
             }else{
@@ -411,6 +416,7 @@ bool checkASTNode(Lexer &lexer, ASTBase *node, DynamicArray<Scope*> &scopes){
                 if(!checkASTNode(lexer, For->body[x], scopes)) return false;
             };
             scopes.pop();
+            newId = body->varId;
         }break;
         case ASTType::PROC_DEF:{
             ASTProcDefDecl *proc = (ASTProcDefDecl*)node;
@@ -426,7 +432,7 @@ bool checkASTNode(Lexer &lexer, ASTBase *node, DynamicArray<Scope*> &scopes){
             ProcEntity *entity = (ProcEntity*)mem::alloc(sizeof(ProcEntity));
             scope->procs.push(entity);
             Scope *body = &scopeAllocMem[scopeOff++];
-            body->init(ScopeType::BLOCK);
+            body->init(ScopeType::BLOCK, 0);
             entity->inputs = proc->inputs;
             entity->inputCount = proc->inputCount;
             entity->outputs = proc->outputs;
@@ -468,7 +474,7 @@ bool checkASTNode(Lexer &lexer, ASTBase *node, DynamicArray<Scope*> &scopes){
             struc.insertValue(Struct->name, id);
             StructEntity *entity = &strucs.newElem();
             Scope *body = &structScopeAllocMem[structScopeOff++];
-            body->init(ScopeType::BLOCK);
+            body->init(ScopeType::BLOCK, 0);
             entity->body = body;
             u64 size = 0;
             scopes.push(body);
@@ -491,6 +497,7 @@ bool checkASTNode(Lexer &lexer, ASTBase *node, DynamicArray<Scope*> &scopes){
         }break;
         case ASTType::DECLERATION:{
             if(checkDecl(lexer, (ASTAssDecl*)node, scopes) == 0) return false;
+            newId = scope->varId;
         }break;
         case ASTType::ASSIGNMENT:{
             ASTAssDecl *assdecl = (ASTAssDecl*)node;
@@ -552,27 +559,29 @@ bool checkASTNode(Lexer &lexer, ASTBase *node, DynamicArray<Scope*> &scopes){
                 return false;
             };
             Scope *bodyScope = &scopeAllocMem[scopeOff++];
-            bodyScope->init(ScopeType::BLOCK);
+            bodyScope->init(ScopeType::BLOCK, scope->varId);
             scopes.push(bodyScope);
             for(u32 x=0; x<If->ifBodyCount; x++){
                 if(!checkASTNode(lexer, If->ifBody[x], scopes)) return false;
             };
             scopes.pop();
+            newId = scope->varId;
             if(If->elseBodyCount > 0){
                 Scope *elseBodyScope = &scopeAllocMem[scopeOff++];
-                elseBodyScope->init(ScopeType::BLOCK);
+                elseBodyScope->init(ScopeType::BLOCK, newId);
                 scopes.push(elseBodyScope);
                 for(u32 x=0; x<If->elseBodyCount; x++){
                     if(!checkASTNode(lexer, If->elseBody[x], scopes)) return false;
                 };
                 scopes.pop();
+                newId = elseBodyScope->varId;
             };
         }break;
     };
     return true;
 };
 bool checkASTFile(Lexer &lexer, ASTFile &file, Scope &scope, DynamicArray<ASTBase*> &globals){
-    scope.init(ScopeType::GLOBAL);
+    scope.init(ScopeType::GLOBAL, 0);
     DynamicArray<Scope*> scopes;
     scopes.init();
     DEFER(scopes.uninit());

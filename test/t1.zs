@@ -1,7 +1,6 @@
-st := "lksdf"
-ts := 34
+foo :: proc(){
+   y:= 0
+   for x := 0...5{
 
-foo :: proc(xy: u32) -> u32{
-   y : u32 = 4
-   x: ^u32 = &y
+   }
 }

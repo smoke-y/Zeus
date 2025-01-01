@@ -93,6 +93,7 @@ struct ASTFor : ASTBase{
     //c-for
         ASTBase *step;
     };
+    VariableEntity *entity;
     String iter;
     ASTTypeNode *type;
     ASTBase *initializer;

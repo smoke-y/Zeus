@@ -399,6 +399,8 @@ bool checkASTNode(Lexer &lexer, ASTBase *node, DynamicArray<Scope*> &scopes){
                     return false;
                 }else entity->size = getSize(lexer, initializerType, For->tokenOff);
                 entity->pointerDepth = initializerPointerDepth;
+                entity->id = body->var.count - 1;
+                For->entity = entity;
                 body->vars.push(entity);
             }else{
                 //c-while

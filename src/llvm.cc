@@ -26,12 +26,14 @@ struct LLVMFile{
     LLVMBucket *start;
     LLVMBucket *cur;
     u32 cursor;
+    u32 label;
 
     void init(){
         start = (LLVMBucket*)mem::alloc(sizeof(LLVMBucket));
         start->next = nullptr;
         cur = start;
         cursor = 0;
+        label = 0;
         tempRegs.init();
         tempRegs.push(0);
     };
@@ -75,6 +77,12 @@ u32 lowerExpression(ASTBase *root, Type type, LLVMFile &file){
     };
     return reg;
 }
+void lowerASTNode(ASTBase *node, LLVMFile &file);
+inline void lowerBody(ASTBase **nodes, u32 count, LLVMFile &file){
+    file.pushRegion();
+    for(u32 x=0; x<count; x++) lowerASTNode(nodes[x], file);
+    file.popRegion();
+}
 void lowerASTNode(ASTBase *node, LLVMFile &file){
     switch(node->type){
         case ASTType::PROC_DEF:{
@@ -105,8 +113,9 @@ void lowerASTNode(ASTBase *node, LLVMFile &file){
         }break;
         case ASTType::DECLERATION:{
             ASTAssDecl *decl = (ASTAssDecl*)node;
-            u32 expReg = lowerExpression(decl->rhs, decl->zType->zType, file);
-            char *typeStr = getLLVMType(decl->zType);
+            Type type = (((ASTVariable*)(decl->lhs[0]))->entity->type);
+            u32 expReg = lowerExpression(decl->rhs, type, file);
+            char *typeStr = TypeToString[(u32)type];
             ASTVariable **vars = (ASTVariable**)decl->lhs;
             for(u32 x=0; x<decl->lhsCount; x++){
                 ASTVariable *var = vars[x];
@@ -116,6 +125,46 @@ void lowerASTNode(ASTBase *node, LLVMFile &file){
                 file.write("%%t%d = load %s, ptr %%e%d\n", tempReg, typeStr, expReg);
                 file.write("store %s %%t%d, ptr %%r%d\n", typeStr, tempReg, id);
             }
+        }break;
+        case ASTType::FOR:{
+            ASTFor *For = (ASTFor*)node;
+            if(For->initializer){
+                Type type = For->entity->type;
+                char *typeStr = TypeToString[(u32)type];
+                u32 id = For->entity->id;
+                file.write("%%r%d = alloca %s\n", id, typeStr);
+                u32 initReg = lowerExpression(For->initializer, type, file);
+                u32 endReg = lowerExpression(For->end, type, file);
+                u32 stepReg;
+                if(For->step) stepReg = lowerExpression(For->step, type, file);
+                else{
+                    stepReg = file.newReg();
+                    file.write("%%e%d = alloca %s\nstore %s 1, ptr %%e%d\n", stepReg, typeStr, typeStr, stepReg);
+                };
+                u32 tmpReg =file.newReg();
+                file.write("%%t%d = load %s, ptr %%e%d\n", tmpReg, typeStr, initReg);
+                file.write("store %s %%t%d, ptr %%r%d\n", typeStr, tmpReg, id);
+                u32 cmpLabel = file.label++;
+                u32 bdyLabel = file.label++;
+                u32 exitLabel = file.label++;
+                u32 cmpLoadReg1 = file.newReg();
+                u32 cmpLoadReg2 = file.newReg();
+                u32 cmpResReg = file.newReg();
+                file.write("br label %%_%d\n_%d:\n%%t%d = load %s, ptr %%r%d\n", cmpLabel, cmpLabel, cmpLoadReg1, typeStr, id);
+                file.write("%%t%d = load %s, ptr %%e%d\n", cmpLoadReg2, typeStr, endReg);
+                file.write("%%t%d = icmp eq %s %%t%d, %%t%d\n", cmpResReg, typeStr, cmpLoadReg1, cmpLoadReg2);
+                file.write("br i1 %%t%d, label %%_%d, label %%_%d\n", cmpResReg, bdyLabel, exitLabel);
+                file.write("_%d:\n", bdyLabel);
+                lowerBody(For->body, For->bodyCount, file);
+                u32 updReg1 = file.newReg();
+                u32 updReg2 = file.newReg();
+                u32 updReg3 = file.newReg();
+                file.write("%%t%d = load %s, ptr %%e%d\n", updReg1, typeStr, stepReg);
+                file.write("%%t%d = load %s, ptr %%r%d\n", updReg2, typeStr, id);
+                file.write("%%t%d = add nsw %s %%t%d, %%t%d\n", updReg3, typeStr, updReg1, updReg2);
+                file.write("store %s %%t%d, ptr %%r%d\nbr label %%_%d\n", typeStr, updReg3, id, cmpLabel);
+                file.write("_%d:\n", exitLabel);
+            };
         }break;
     }
 };

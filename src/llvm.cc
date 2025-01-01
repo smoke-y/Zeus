@@ -22,6 +22,7 @@ struct LLVMBucket{
     LLVMBucket *next;
 };
 struct LLVMFile{
+    DynamicArray<u32> tempRegs;
     LLVMBucket *start;
     LLVMBucket *cur;
     u32 cursor;
@@ -31,7 +32,13 @@ struct LLVMFile{
         start->next = nullptr;
         cur = start;
         cursor = 0;
+        tempRegs.init();
+        tempRegs.push(0);
     };
+    void uninit(){tempRegs.uninit();}
+    u32 newReg(){return tempRegs[tempRegs.count-1]++;};
+    void popRegion(){tempRegs.pop();};
+    void pushRegion(){tempRegs.push(0);};
     void write(char *fmt, ...){
         va_list args;
         va_start(args, fmt);
@@ -57,9 +64,21 @@ char *getLLVMType(ASTTypeNode *node){
     if(node->pointerDepth) return "ptr";
     return TypeToString[(u32)node->zType];
 }
+u32 lowerExpression(ASTBase *root, Type type, LLVMFile &file){
+    u32 reg = file.newReg();
+    switch(root->type){
+        case ASTType::INTEGER:{
+            ASTNum *num = (ASTNum*)root;
+            char *typeStr = TypeToString[(u32)type];
+            file.write("%%e%d = alloca %s\nstore %s %lld, ptr %%e%d\n", reg, typeStr, typeStr, num->integer, reg);
+        }break;
+    };
+    return reg;
+}
 void lowerASTNode(ASTBase *node, LLVMFile &file){
     switch(node->type){
         case ASTType::PROC_DEF:{
+            file.pushRegion();
             ASTProcDefDecl *proc = (ASTProcDefDecl*)node;
             char *type;
             if(proc->outputCount == 0) type = "void";
@@ -68,7 +87,12 @@ void lowerASTNode(ASTBase *node, LLVMFile &file){
             if(proc->inputCount){
                 u32 x=0;
                 while(true){
-                    file.write("%s", getLLVMType(proc->inputs[x]->zType));
+                    char *type = getLLVMType(proc->inputs[x]->zType);
+                    ASTVariable **vars = (ASTVariable**)proc->inputs[x]->lhs;
+                    for(u32 i=0; i<proc->inputs[x]->lhsCount; i++){
+                        ASTVariable *var = vars[i];
+                        file.write("%s noundef %%%d", type, var->entity->id);
+                    }
                     x++;
                     if(x == proc->inputCount) break;
                     file.write(",");
@@ -77,6 +101,21 @@ void lowerASTNode(ASTBase *node, LLVMFile &file){
             file.write("){\n");
             for(u32 x=0; x<proc->bodyCount; x++) lowerASTNode(proc->body[x], file);
             file.write("}\n");
+            file.popRegion();
+        }break;
+        case ASTType::DECLERATION:{
+            ASTAssDecl *decl = (ASTAssDecl*)node;
+            u32 expReg = lowerExpression(decl->rhs, decl->zType->zType, file);
+            char *typeStr = getLLVMType(decl->zType);
+            ASTVariable **vars = (ASTVariable**)decl->lhs;
+            for(u32 x=0; x<decl->lhsCount; x++){
+                ASTVariable *var = vars[x];
+                u32 id = var->entity->id;
+                u32 tempReg = file.newReg();
+                file.write("%%r%d = alloca %s\n", id, typeStr);
+                file.write("%%t%d = load %s, ptr %%e%d\n", tempReg, typeStr, expReg);
+                file.write("store %s %%t%d, ptr %%r%d\n", typeStr, tempReg, id);
+            }
         }break;
     }
 };
@@ -116,12 +155,12 @@ GLOBAL_WRITE_LLVM_TO_BUFF:
                 ASTString *str = (ASTString*)assdecl->rhs;
                 u32 off;
                 stringToId.getValue(str->str, &off);
-                temp = snprintf(buff+cursor, BUFF_SIZE-cursor, "@%.*s = dso_local global ptr @.str.%d\n", var->name.len, var->name.mem, off);
+                temp = snprintf(buff+cursor, BUFF_SIZE-cursor, "@g%d = dso_local global ptr @.str.%d\n", var->entity->id, off);
             }break;
             case ASTType::CHARACTER:
             case ASTType::INTEGER:{
                 ASTNum *num = (ASTNum*)assdecl->rhs;
-                temp = snprintf(buff+cursor, BUFF_SIZE-cursor, "@%.*s = dso_local global %s %lld\n", var->name.len, var->name.mem, TypeToString[(u32)var->entity->type], num->integer);
+                temp = snprintf(buff+cursor, BUFF_SIZE-cursor, "@g%d = dso_local global %s %lld\n", var->entity->id, TypeToString[(u32)var->entity->type], num->integer);
             }break;
         };
         if(temp + cursor >= BUFF_SIZE){
@@ -140,6 +179,7 @@ GLOBAL_WRITE_LLVM_TO_BUFF:
         LLVMFile llvmFile;
         llvmFile.init();
         for(u32 x=0; x<astFile.nodes.count; x++) lowerASTNode(astFile.nodes[x], llvmFile);
+        llvmFile.uninit();
         LLVMBucket *buc = llvmFile.start;
         while(buc){
             WRITE(file, buc->buff, strlen(buc->buff));

@@ -8,6 +8,7 @@ struct Scope;
 struct VariableEntity{
     Type type;
     u64 size;
+    u32 id;
     u8 pointerDepth;
 };
 struct StructEntity{
@@ -331,6 +332,7 @@ u64 checkDecl(Lexer &lexer, ASTAssDecl *assdecl, DynamicArray<Scope*> &scopes){
         scope->var.insertValue(name, id);
         entity->pointerDepth = typePointerDepth;
         entity->type = typeType;
+        entity->id = id;
         if(typePointerDepth > 0) entity->size = 64;
         else entity->size = size;
     };

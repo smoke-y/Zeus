@@ -82,6 +82,14 @@ inline void lowerBody(ASTBase **nodes, u32 count, LLVMFile &file){
 }
 void lowerASTNode(ASTBase *node, LLVMFile &file){
     switch(node->type){
+        case ASTType::RETURN:{
+            ASTReturn *ret = (ASTReturn*)node;
+            if(ret->retCount == 0){
+                file.write("ret void\n");
+            }else{
+                //TODO :
+            }
+        }break;
         case ASTType::IF:{
             ASTIf *If = (ASTIf*)node;
             char *typeStr = TypeToString[(u32)If->zType];

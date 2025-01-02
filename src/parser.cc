@@ -21,6 +21,7 @@ enum class ASTType{
     INITIALIZER_LIST,
     STRING,
     ARRAY_AT,
+    RETURN,
 
     B_START,  //binary operators start
     B_ADD,
@@ -153,6 +154,10 @@ struct ASTArrayAt : ASTBase{
 };
 struct ASTString : ASTBase{
     String str;
+};
+struct ASTReturn : ASTBase{
+    ASTBase **exprs;
+    u32 retCount;
 };
 
 struct ASTFile{
@@ -568,7 +573,7 @@ inline u32 eatNewLine(DynamicArray<TokType> &types, u32 x){
     return x;
 };
 bool parseBlock(Lexer &lexer, ASTFile &file, DynamicArray<ASTBase*> &table, u32 &xArg);
-ASTBase** parseBody(Lexer &lexer, ASTFile &file, u32 &xArg, u32 &count){
+ASTBase** parseBody(Lexer &lexer, ASTFile &file, u32 &xArg, u32 &count, bool insertReturn = false){
     BRING_TOKENS_TO_SCOPE;
     u32 x = xArg;
     DEFER(xArg = x);
@@ -588,6 +593,11 @@ ASTBase** parseBody(Lexer &lexer, ASTFile &file, u32 &xArg, u32 &count){
                 return nullptr;
             };
         };
+        if(insertReturn){
+            ASTReturn *ret = (ASTReturn*)file.newNode(sizeof(ASTReturn), ASTType::RETURN);
+            ret->retCount = 0;
+            bodyTable.push(ret);
+        }
         u32 size = sizeof(ASTBase*) * bodyTable.count;
         ASTBase **bodyNodes = (ASTBase**)file.balloc(size);
         memcpy(bodyNodes, bodyTable.mem, size);
@@ -836,6 +846,7 @@ bool parseBlock(Lexer &lexer, ASTFile &file, DynamicArray<ASTBase*> &table, u32 
                             proc->inputCount = inputs.count;
                             inputs.uninit();
                         };
+                        bool defaultReturn = true;
                         if(tokTypes[++x] == (TokType)'-'){
                             if(tokTypes[++x] != (TokType)'>'){
                                 lexer.emitErr(tokOffs[x].off, "Expected '>'");
@@ -877,10 +888,11 @@ bool parseBlock(Lexer &lexer, ASTFile &file, DynamicArray<ASTBase*> &table, u32 
                             memcpy(outputNodes, outputs.mem, size);
                             proc->outputs = outputNodes;
                             proc->outputCount = outputs.count;
+                            defaultReturn = outputs.count == 0;
                             outputs.uninit();
                         }else proc->outputCount = 0;
                         u32 count;
-                        ASTBase **body = parseBody(lexer, file, x, count);
+                        ASTBase **body = parseBody(lexer, file, x, count, defaultReturn);
                         proc->body = body;
                         proc->bodyCount = count;
                         table.push(proc);
@@ -1115,6 +1127,11 @@ namespace dbg{
                 String ztype = makeStringFromTokOff(type->tokenOff, lexer);
                 PLOG("z_type: %.*s", ztype.len, ztype.mem);
                 PLOG("pointer_depth: %d", type->pointerDepth);
+            }break;
+            case ASTType::RETURN:{
+                ASTReturn *ret = (ASTReturn*)node;
+                printf("return");
+                for(u32 x=0; x<ret->retCount; x++) dumpASTNode(ret->exprs[0], lexer, padding+1);
             }break;
             case ASTType::B_LEQU: if(hasNotDumped){printf("lequ");hasNotDumped=false;};
             case ASTType::B_GEQU: if(hasNotDumped){printf("gequ");hasNotDumped=false;};

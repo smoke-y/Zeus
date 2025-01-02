@@ -558,6 +558,7 @@ bool checkASTNode(Lexer &lexer, ASTBase *node, DynamicArray<Scope*> &scopes){
                 lexer.emitErr(tokOffs[If->exprTokenOff].off, "Invalid expression");
                 return false;
             };
+            If->zType = treeType;
             Scope *bodyScope = &scopeAllocMem[scopeOff++];
             bodyScope->init(ScopeType::BLOCK, scope->varId);
             scopes.push(bodyScope);

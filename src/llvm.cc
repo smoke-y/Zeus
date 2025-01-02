@@ -35,7 +35,6 @@ struct LLVMFile{
         cursor = 0;
         label = 0;
         tempRegs.init();
-        tempRegs.push(0);
     };
     void uninit(){tempRegs.uninit();}
     u32 newReg(){return tempRegs[tempRegs.count-1]++;};
@@ -79,12 +78,25 @@ u32 lowerExpression(ASTBase *root, Type type, LLVMFile &file){
 }
 void lowerASTNode(ASTBase *node, LLVMFile &file);
 inline void lowerBody(ASTBase **nodes, u32 count, LLVMFile &file){
-    file.pushRegion();
     for(u32 x=0; x<count; x++) lowerASTNode(nodes[x], file);
-    file.popRegion();
 }
 void lowerASTNode(ASTBase *node, LLVMFile &file){
     switch(node->type){
+        case ASTType::IF:{
+            ASTIf *If = (ASTIf*)node;
+            char *typeStr = TypeToString[(u32)If->zType];
+            u32 exprReg = lowerExpression(If->expr, If->zType, file);
+            u32 ifBodyLabel = file.label++;
+            u32 exitLabel = file.label++;
+            u32 ifReg = file.newReg();
+            u32 ifExprReg = file.newReg();
+            file.write("%%t%d = load %s, ptr %%e%d\n", ifExprReg, typeStr, exprReg);
+            file.write("%%t%d = icmp eq %s %%t%d, 0\n", ifReg, typeStr, ifExprReg);
+            file.write("br i1 %%t%d, label %%_%d, label %%_%d\n_%d:\n", ifReg, ifBodyLabel, exitLabel, ifBodyLabel);
+            lowerBody(If->ifBody, If->ifBodyCount, file);
+            file.write("br label %%_%d\n_%d:\n", exitLabel, exitLabel);
+            if(If->elseBodyCount) lowerBody(If->elseBody, If->elseBodyCount, file);
+        }break;
         case ASTType::PROC_DEF:{
             file.pushRegion();
             ASTProcDefDecl *proc = (ASTProcDefDecl*)node;

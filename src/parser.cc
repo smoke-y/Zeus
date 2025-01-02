@@ -84,6 +84,7 @@ struct ASTIf : ASTBase{
     u32 ifBodyCount;
     u32 elseBodyCount;
     u32 exprTokenOff;
+    Type zType;
 };
 struct ASTFor : ASTBase{
     //when expr and initializer is nullptr, then we have an infinite loop

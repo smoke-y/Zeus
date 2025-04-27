@@ -9,7 +9,7 @@
 #pragma clang diagnostic ignored "-Wint-to-pointer-cast"
 #endif
 
-#include "include.hh"
+#include "build.hh"
 
 s32 main(s32 argc, char **argv){
     mem::init();

@@ -1,6 +1,4 @@
-#include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <math.h>
 
 #if(SIMD)
@@ -13,9 +11,7 @@
 #include <fcntl.h>
 #endif
 
-#include "basic.hh"
 #include "mem.cc"
-#include "ds.cc"
 
 #include "report.cc"
 #include "lexer.cc"

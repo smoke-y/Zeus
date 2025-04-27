@@ -1,8 +1,8 @@
 #pragma once
 
-#define ARRAY_LENGTH(x)   sizeof(x)/sizeof(x[0])
-#define SET_BIT(x, pos)   x |=  (1 << (u32)pos)
-#define CLEAR_BIT(x, pos) x &= ~(1 << (u32)pos)
+#define ARRAY_LENGTH(x)   (sizeof(x)/sizeof(x[0]))
+#define SET_BIT(x, pos)   (x |=  (1 << (u32)pos))
+#define CLEAR_BIT(x, pos) (x &= ~(1 << (u32)pos))
 #define IS_BIT(x, pos)    ((((u32)(x))>>((u32)pos)) & 1)
 
 typedef unsigned char           u8;
@@ -20,19 +20,8 @@ typedef unsigned long long int  b64;
 typedef float                   f32;
 typedef double                  f64;
 
-void unreachable(const char *func, char *file, u32 line) {
-    printf("\n%s:%d(%s) unreachable area reached", file, line, func);
-};
-#define UNREACHABLE unreachable(__FUNCTION__, __FILE__, __LINE__)
-#if(DBG)
-void ass(bool x, const char *func, const char *file, u32 line){
-    if(x){return;};
-    printf("\n%s:%d(%s) assertion failed\n", file, line, func);
-};
-#define ASSERT(expr)   ass(expr, __FUNCTION__, __FILE__, __LINE__)
-#else
-#define ASSERT(expr)
-#endif
+#define UNREACHABLE    printf("\n%s:%d(%s) unreachable area reached", __FILE__, __LINE__, __FUNCTION__)
+#define ASSERT(expr)   if(!expr) printf("\n%s:%d(%s) assertion failed: %s", __FILE__, __LINE__, __FUNCTION__, #expr)
 
 //DEFER IN CC
 template <typename F>

@@ -81,7 +81,7 @@ s32 main(s32 argc, char **argv){
     for(u32 x=dependencyCount; x > 0;){
         x -= 1;
         FileEntity &fe = linearDepEntities[x];
-        if(!checkASTFile(fe.lexer, fe.file, globalScopes[x], globals)){
+        if(!checkASTFile(fe.lexer, fe.file, globalScopes[x], globals, linearDepEntities)){
             report::flushReports();
             return EXIT_SUCCESS;
         };

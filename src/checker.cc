@@ -1,3 +1,8 @@
+#include "../include/basic.hh"
+#include "../include/lexer.hh"
+#include "../include/ds.hpp"
+#include "../include/parser.hh"
+
 enum class ScopeType{
     GLOBAL,
     PROC,
@@ -581,7 +586,7 @@ bool checkASTNode(Lexer &lexer, ASTBase *node, DynamicArray<Scope*> &scopes){
     };
     return true;
 };
-bool checkASTFile(Lexer &lexer, ASTFile &file, Scope &scope, DynamicArray<ASTBase*> &globals){
+bool checkASTFile(Lexer &lexer, ASTFile &file, Scope &scope, DynamicArray<ASTBase*> &globals, DynamicArray<FileEntity>& linearDepEntities){
     scope.init(ScopeType::GLOBAL, 0);
     DynamicArray<Scope*> scopes;
     scopes.init();

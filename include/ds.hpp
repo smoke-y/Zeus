@@ -114,7 +114,12 @@ struct DynamicArray {
         len = startCount;
         mem = (T*)mem::alloc(sizeof(T) * startCount);
     };
-    void uninit() { mem::free(mem); };
+    void uninit() {
+#if(DBG == true)
+        memset(mem, 0, sizeof(T)*len);
+#endif
+        mem::free(mem);
+    };
     void push(const T &t) {
         if (count == len) { realloc(len + len / 2 + 1); };
         mem[count] = t;

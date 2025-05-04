@@ -31,7 +31,6 @@ namespace Word{
     };
     const WordData poundwordsData[] = {
         {"import", TokType::P_IMPORT},
-        {"stack_size", TokType::P_STACK_SIZE},
     };
     HashmapStr keywords;
     HashmapStr poundwords;
@@ -100,7 +99,7 @@ void Lexer::uninit(){
     tokenTypes.uninit();
     tokenOffsets.uninit();
 };
-void Lexer::emitErr(u32 off, char *fmt, ...) {
+void Lexer::emitErrAbs(u32 off, char *fmt, ...) {
     if(report::errorOff == MAX_ERRORS) return;
     report::Report &rep = report::errors[report::errorOff];
     report::errorOff += 1;
@@ -113,6 +112,20 @@ void Lexer::emitErr(u32 off, char *fmt, ...) {
     report::reportBuffTop += vsprintf(report::reportBuff, fmt, args);
     va_end(args);
 };
+void Lexer::emitErr(u32 off, char *fmt, ...) {
+    if(report::errorOff == MAX_ERRORS) return;
+    report::Report &rep = report::errors[report::errorOff];
+    report::errorOff += 1;
+    rep.fileName = fileName;
+    rep.off = tokenOffsets[off].off;
+    rep.fileContent = fileContent;
+    rep.msg = report::reportBuff + report::reportBuffTop;
+    va_list args;
+    va_start(args, fmt);
+    report::reportBuffTop += vsprintf(report::reportBuff, fmt, args);
+    va_end(args);
+};
+
 
 b32 Lexer::genTokens() {
     char *src = fileContent;
@@ -125,12 +138,12 @@ b32 Lexer::genTokens() {
                          u32 start = x;
                          while(isAlpha(src[x]) || src[x] == '_') x += 1;
                          if(start == x){
-                             emitErr(start, "Expected an identifier");
+                             emitErrAbs(start, "Expected an identifier");
                              return false;
                          }
                          u32 type;
                          if(Word::poundwords.getValue({src+start, x-start}, &type) == false){
-                             emitErr(start, "Unkown poundword");
+                             emitErrAbs(start, "Unkown poundword");
                              return false;
                          };
                          tokenTypes.push((TokType)type);
@@ -141,7 +154,7 @@ b32 Lexer::genTokens() {
             case '\'':{
                           x += 1;
                           if(src[x+1] != '\''){
-                              emitErr(x-1, "Expected ending single quotes");
+                              emitErrAbs(x-1, "Expected ending single quotes");
                               return false;
                           };
                           tokenTypes.push(TokType::SINGLE_QUOTES);
@@ -157,7 +170,7 @@ DOUBLE_QUOTE_FIND_END:
                           while(src[x] != '\"'){
                               x += 1;
                               if(src[x] == '\0'){
-                                  emitErr(start, "Expected ending double quotes");
+                                  emitErrAbs(start, "Expected ending double quotes");
                                   return false;
                               };
                           };
@@ -187,7 +200,7 @@ CHECK_NUM_DEC:
                              while(isNum(src[x]) || src[x] == '_') x += 1;
                              if(src[x] == '.' && src[x+1] != '.'){
                                  if(numType == TokType::DECIMAL){
-                                     emitErr(start, "Decimal cannot have 2 decimals");
+                                     emitErrAbs(start, "Decimal cannot have 2 decimals");
                                      return false;
                                  };
                                  numType = TokType::DECIMAL;
@@ -259,7 +272,7 @@ CHECK_NUM_DEC:
                                      if(nullbyteMask != 0){
                                          if(frontslashMask == 0 || asterixMask == 0){
                                              if(nullbyteMask){
-                                                 emitErr(beg, "%d multi line comment%snot terminated", level, (level==1)?" ":"s ");
+                                                 emitErrAbs(beg, "%d multi line comment%snot terminated", level, (level==1)?" ":"s ");
                                                  return false;
                                              };
                                              x += 16;
@@ -282,7 +295,7 @@ CHECK_NUM_DEC:
                                          y += 1;
                                          switch (src[x]) {
                                              case '\0': {
-                                                            emitErr(beg, "%d multi line comment%snot terminated", level, (level==1)?" ":"s ");
+                                                            emitErrAbs(beg, "%d multi line comment%snot terminated", level, (level==1)?" ":"s ");
                                                             return false;
                                                         } break;
                                              case '*': {
@@ -308,7 +321,7 @@ CHECK_NUM_DEC:
                                  while (level != 0) {
                                      switch (src[x]) {
                                          case '\0': {
-                                                        emitErr(beg, "%d multi line comment%snot terminated", level, (level==1)?" ":"s ");
+                                                        emitErrAbs(beg, "%d multi line comment%snot terminated", level, (level==1)?" ":"s ");
                                                         return false;
                                                     } break;
                                          case '*': {
@@ -344,7 +357,7 @@ LEXER_EMIT_END_OF_FILE:
 namespace dbg {
     void dumpLexerTokens(Lexer &lexer) {
         for (u32 x = 0; x < lexer.tokenTypes.count; x += 1) {
-            printf("\n-----[TOKEN]-----\n");
+            printf("\n-----[TOKEN] %d-----\n", lexer.tokenOffsets[x].off);
             switch (lexer.tokenTypes[x]) {
                 case TokType::DOUBLE_QUOTES: {
                                                  printf("double_quotes: %.*s", lexer.tokenOffsets[x].len, lexer.fileContent + lexer.tokenOffsets[x].off);

@@ -44,7 +44,6 @@ enum class TokType {
 
     P_START,     //poundwords start
     P_IMPORT,
-    P_STACK_SIZE,
     P_END,       //poundwords end
 };
 struct TokenOffset {
@@ -61,6 +60,7 @@ struct Lexer{
     bool init(char *fn);
     void uninit();
     void emitErr(u32 off, char *fmt, ...);
+    void emitErrAbs(u32 off, char *fmt, ...);
     b32 genTokens();
 };
 

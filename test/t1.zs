@@ -1,20 +1,16 @@
-//single line comment
-
-//yippeeeee!
-
-/*
-    multi-line comment
-    /*
-        nested multi-line comment
-    */
-*/
-
-foo :: proc(){
-   y:= 0
-   for x := 0...5{
-
-   }
-   if 23{
-      sdf := 234
-   }
+main :: proc(){
+    x := dki(23, 234)
+    for x:=0...69..2{
+        y := 234
+    }
+    if 2+3 {
+        y := 234
+        v := y[239]
+    } else if 23{
+        x := 234
+    } else if 23{
+        x := 234
+    } else {
+        lskjd := 234
+    }
 }

@@ -18,6 +18,3 @@
 #include "type.cc"
 #include "parser.cc"
 #include "checker.cc"
-
-#include "riscvAsm.cc"
-#include "llvm.cc"

@@ -355,63 +355,63 @@ bool checkASTNode(Lexer &lexer, ASTBase *node, DynamicArray<Scope*> &scopes){
             ASTFor *For = (ASTFor*)node;
             Scope *body = &scopeAllocMem[scopeOff++];
             body->init(ScopeType::BLOCK, scope->varId);
-            if(For->initializer != nullptr){
+            if(For->decl != nullptr){
                 //c-for
-                bool found = false;
-                for(u32 x=scopes.count; x!=0;){
-                    x -= 1;
-                    Scope *scope = scopes[x];
-                    u32 off;
-                    if(!scope->var.getValue(For->iter, &off)) continue;
-                    found = true;
-                    break;
-                };
-                if(found){
-                    lexer.emitErr(tokOffs[For->tokenOff].off, "Iterator defined before");
-                    return false;
-                };
-                u32 initializerPointerDepth, endPointerDepth;
-                Type initializerType = checkTree(lexer, For->initializer, scopes, initializerPointerDepth);
-                Type endType = checkTree(lexer, For->end, scopes, endPointerDepth);
-                if(initializerType == Type::INVALID) return false;
-                if(endType == Type::INVALID) return false;
-                if(initializerType != endType){
-                    lexer.emitErr(tokOffs[For->tokenOff].off, "Initializer type not equal to end type");
-                    return false;
-                };
-                if(initializerPointerDepth != endPointerDepth){
-                    lexer.emitErr(tokOffs[For->tokenOff].off, "Initializer pointer depth not equal to end pointer depth");
-                    return false;
-                };
-                if(For->step){
-                    u32 stepPointerDepth;
-                    Type stepType = checkTree(lexer, For->step, scopes, stepPointerDepth);
-                    if(stepType == Type::INVALID) return false;
-                    if(!isNumber(stepType)){
-                        lexer.emitErr(tokOffs[For->tokenOff].off, "Step type should be an integer");
-                        return false;
-                    };
-                    if(stepPointerDepth > 0){
-                        lexer.emitErr(tokOffs[For->tokenOff].off, "Step expression tree cannot contain pointers");
-                        return false;
-                    };
-                };
-                if(For->type){
-                    if(!fillTypeInfo(lexer, For->type)) return false;
-                };
-                u32 id = body->varId++;
-                body->var.insertValue(For->iter, id);
-                VariableEntity *entity = (VariableEntity*)mem::alloc(sizeof(VariableEntity));
-                entity->type = initializerType;
-                if(initializerPointerDepth > 0) entity->size = 64;
-                else if(initializerType > Type::COUNT){
-                    lexer.emitErr(tokOffs[For->tokenOff].off, "Iterator has to be of type integer or a pointer");
-                    return false;
-                }else entity->size = getSize(lexer, initializerType, For->tokenOff);
-                entity->pointerDepth = initializerPointerDepth;
-                entity->id = id;
-                For->entity = entity;
-                body->vars.push(entity);
+                //bool found = false;
+                //for(u32 x=scopes.count; x!=0;){
+                //    x -= 1;
+                //    Scope *scope = scopes[x];
+                //    u32 off;
+                //    if(!scope->var.getValue(For->iter, &off)) continue;
+                //    found = true;
+                //    break;
+                //};
+                //if(found){
+                //    lexer.emitErr(tokOffs[For->tokenOff].off, "Iterator defined before");
+                //    return false;
+                //};
+                //u32 initializerPointerDepth, endPointerDepth;
+                //Type initializerType = checkTree(lexer, For->initializer, scopes, initializerPointerDepth);
+                //Type endType = checkTree(lexer, For->end, scopes, endPointerDepth);
+                //if(initializerType == Type::INVALID) return false;
+                //if(endType == Type::INVALID) return false;
+                //if(initializerType != endType){
+                //    lexer.emitErr(tokOffs[For->tokenOff].off, "Initializer type not equal to end type");
+                //    return false;
+                //};
+                //if(initializerPointerDepth != endPointerDepth){
+                //    lexer.emitErr(tokOffs[For->tokenOff].off, "Initializer pointer depth not equal to end pointer depth");
+                //    return false;
+                //};
+                //if(For->step){
+                //    u32 stepPointerDepth;
+                //    Type stepType = checkTree(lexer, For->step, scopes, stepPointerDepth);
+                //    if(stepType == Type::INVALID) return false;
+                //    if(!isNumber(stepType)){
+                //        lexer.emitErr(tokOffs[For->tokenOff].off, "Step type should be an integer");
+                //        return false;
+                //    };
+                //    if(stepPointerDepth > 0){
+                //        lexer.emitErr(tokOffs[For->tokenOff].off, "Step expression tree cannot contain pointers");
+                //        return false;
+                //    };
+                //};
+                //if(For->type){
+                //    if(!fillTypeInfo(lexer, For->type)) return false;
+                //};
+                //u32 id = body->varId++;
+                //body->var.insertValue(For->iter, id);
+                //VariableEntity *entity = (VariableEntity*)mem::alloc(sizeof(VariableEntity));
+                //entity->type = initializerType;
+                //if(initializerPointerDepth > 0) entity->size = 64;
+                //else if(initializerType > Type::COUNT){
+                //    lexer.emitErr(tokOffs[For->tokenOff].off, "Iterator has to be of type integer or a pointer");
+                //    return false;
+                //}else entity->size = getSize(lexer, initializerType, For->tokenOff);
+                //entity->pointerDepth = initializerPointerDepth;
+                //entity->id = id;
+                //For->entity = entity;
+                //body->vars.push(entity);
             }else{
                 //c-while
                 if(!checkASTNode(lexer, For->expr, scopes)) return false;

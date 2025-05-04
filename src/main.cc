@@ -39,6 +39,7 @@ s32 main(s32 argc, char **argv){
         report::flushReports();
         return EXIT_SUCCESS;
     };
+
     for(u32 x=0; x<linearDepStrings.count; x++){
         String path = linearDepStrings[x];
         char c = path.mem[path.len];
@@ -88,6 +89,5 @@ s32 main(s32 argc, char **argv){
         for(u32 x=0; x<scopeOff; x++) scopeAllocMem[x].uninit();
         scopeOff = 0;
     };
-    lowerToLLVM(outputPath, globals);
     return EXIT_SUCCESS;
 };

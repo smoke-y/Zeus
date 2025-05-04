@@ -100,14 +100,13 @@ struct ASTFor : ASTBase{
         //c-while
         ASTBase *expr;
         //c-for
-        ASTBase *step;
+        ASTAssDecl *decl;
     };
-    VariableEntity *entity;
-    String iter;
-    ASTTypeNode *type;
-    ASTBase *initializer;
+    //c-for
+    ASTBase *step;
     ASTBase *end;
     ASTBase **body;
+    VariableEntity *entity;
     u32 bodyCount;
     u32 tokenOff;
 };

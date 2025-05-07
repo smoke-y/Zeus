@@ -21,3 +21,4 @@ enum class Type{
 };
 
 bool isNumber(Type type);
+bool isInteger(Type type);

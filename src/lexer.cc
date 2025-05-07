@@ -72,7 +72,7 @@ bool Lexer::init(char *fn){
     len = GetFullPathNameA(fn, 1024, tempBuff, NULL);
 #elif(LIN)
     char *fullpath = realpath(fn, tempBuff);
-    if(fullpath == nullptr) return 0;
+    if(fullpath == nullptr) return false;
     len = strlen(fullpath);
 #endif
     FILE *fp = fopen(tempBuff, "r");

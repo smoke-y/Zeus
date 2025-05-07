@@ -1,15 +1,17 @@
 #include "../include/parser.hh"
+#include "../include/dependency.hh"
 
-void ASTFile::init(){
-    dependencies.init();
+void ASTFile::init(u32 astId){
+    id = astId;
     pages.init();
     nodes.init();
+    dependencies.init();
     pages.push((char*)mem::alloc(AST_PAGE_SIZE));
     curPageWatermark = 0;
 };
 void ASTFile::uninit(){
-    dependencies.uninit();
     for(u32 x=0; x<pages.count; x++) mem::free(pages[x]);
+    dependencies.uninit();
     pages.uninit();
     nodes.uninit();
 };
@@ -33,13 +35,6 @@ void* ASTFile::balloc(u64 size){
     curPageWatermark += size;
     return mem;
 };
-
-//------------DEPENDENCY-SYSTEM-----------------------
-static DynamicArray<FileEntity> linearDepEntities;
-static DynamicArray<String> linearDepStrings;
-//------------DEPENDENCY-SYSTEM-----------------------
-//POUND-SUPPORT
-static f32 pStackSize = 1;  //mb
 
 s64 string2int(const String &str){
     s64 num = 0;
@@ -316,6 +311,10 @@ ASTBase* _genASTExprTree(Lexer &lexer, ASTFile &file, u32 &xArg, u8 &bracketArg,
                 }break;
     };
     if(unOp){
+        if(unaryType == ASTType::U_MEM && (lhs->type != ASTType::MODIFIER && lhs->type != ASTType::VARIABLE && lhs->type != ASTType::ARRAY_AT)){
+            lexer.emitErr(unOp->tokenOff, "Expected a modifier, variable or array_at after '&'");
+            return nullptr;
+        };
         unOp->child = lhs;
         lhs = unOp;
     };
@@ -577,6 +576,7 @@ ASTFor* parseForLoop(Lexer &lexer, ASTFile &file, u32 &xArg){
     For->bodyCount = count;
     return For;
 };
+static int dfdf = 0;
 ASTIf *parseIfElse(Lexer &lexer, ASTFile &file, u32 &xArg){
     BRING_TOKENS_TO_SCOPE;
     u32 x = xArg;
@@ -713,6 +713,7 @@ ASTProcDefDecl *parseProcDefDecl(Lexer &lexer, ASTFile &file, u32 &xArg){
     }else proc->outputCount = 0;
     u32 count;
     ASTBase **body = parseBody(lexer, file, x, count);
+    if(body == nullptr) return nullptr;
     proc->body = body;
     proc->bodyCount = count;
     return proc;
@@ -731,9 +732,14 @@ bool parseBlock(Lexer &lexer, ASTFile &file, DynamicArray<ASTBase*> &table, u32 
                                        lexer.emitErr(x, "Expected a string");
                                        return false;
                                    };
+                                   dep::insertCallFrameIfNotInserted(file.id);
                                    String name = makeStringFromTokOff(x, lexer);
-                                   file.dependencies.push(linearDepStrings.count);
-                                   linearDepStrings.push(name);
+                                   s32 stat = dep::insertFileToDepsAndInitLexer(name);
+                                   if(stat == -2){
+                                       lexer.emitErr(x, "Circular import detected\n");
+                                       return false;
+                                   }else if(stat == -1) return false;
+                                   file.dependencies.push(stat);
                                    x++;
                                }break;
         case TokType::K_FOR:{

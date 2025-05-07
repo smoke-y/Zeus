@@ -1,21 +1,10 @@
-//@ignore
-#if(__clang__)
-#pragma clang diagnostic ignored "-Wwritable-strings"
-#pragma clang diagnostic ignored "-Wswitch"
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
-#pragma clang diagnostic ignored "-Wmicrosoft-include"
-#pragma clang diagnostic ignored "-Wmicrosoft-goto"
-#pragma clang diagnostic ignored "-Wswitch"
-#pragma clang diagnostic ignored "-Wint-to-pointer-cast"
-#endif
-
 #include "build.hh"
 
 s32 main(s32 argc, char **argv){
     mem::init();
     if(argc < 2){
         printf("no entryfile provided\n");
-        return EXIT_SUCCESS;
+        return EXIT_FAILURE;
     };
     char *inputPath = argv[1];
     char *outputPath = "out.asm";
@@ -23,71 +12,63 @@ s32 main(s32 argc, char **argv){
 
     Word::init(Word::keywords, Word::keywordsData, ARRAY_LENGTH(Word::keywordsData));
     Word::init(Word::poundwords, Word::poundwordsData, ARRAY_LENGTH(Word::poundwordsData));
-    linearDepEntities.init();
-    linearDepStrings.init();
-
-    FileEntity &mainFileEntity = linearDepEntities.newElem();
-
-    mainFileEntity.lexer.init(inputPath);
-    mainFileEntity.file.init();
-
-    if(!mainFileEntity.lexer.genTokens()){
-        report::flushReports();
-        return EXIT_SUCCESS;
+    dep::init();
+    DEFER({
+            Word::uninit(Word::keywords);
+            Word::uninit(Word::poundwords);
+            dep::uninit();
+            mem::uninit();
+            });
+    s32 mainFileId = dep::insertFileToDepsAndInitLexer({inputPath, (u32)strlen(inputPath)});
+    if(mainFileId == -1){
+        printf("Invalid entryfile location\n");
+        return EXIT_FAILURE;
     };
-    if(!parseFile(mainFileEntity.lexer, mainFileEntity.file)){
-        report::flushReports();
-        return EXIT_SUCCESS;
-    };
+    dep::insertCallFrameIfNotInserted(mainFileId);
 
-    for(u32 x=0; x<linearDepStrings.count; x++){
-        String path = linearDepStrings[x];
-        char c = path.mem[path.len];
-        path.mem[path.len] = '\0';
-        FileEntity &fe = linearDepEntities.newElem();
-        fe.lexer.init(path.mem);
-        fe.file.init();
-        path.mem[path.len] = c;
-        if(!fe.lexer.genTokens()){
+    for(u32 x=0; x<dep::lexers.count; x++){
+        Lexer &lexer = dep::lexers[x];
+        if(!lexer.genTokens()){
             report::flushReports();
-            return EXIT_SUCCESS;
+            return EXIT_FAILURE;
         };
-        if(!parseFile(fe.lexer, fe.file)){
+        ASTFile &file = dep::astFiles.newElem();
+        file.init(x);
+        if(!parseFile(lexer, file)){
             report::flushReports();
-            return EXIT_SUCCESS;
+            return EXIT_FAILURE;
         };
     };
-    u32 dependencyCount = linearDepEntities.count;
-    globalScopes = (Scope*)mem::alloc(sizeof(Scope) * dependencyCount);
-    memset(globalScopes, 0, sizeof(Scope) * dependencyCount);
-    scopeAllocMem = (Scope*)mem::alloc(sizeof(Scope)*1000);
-    structScopeAllocMem = (Scope*)mem::alloc(sizeof(Scope)*100);
-    struc.init();
-    strucs.init();
+
+    check::init();
     DynamicArray<ASTBase*> globals;
     globals.init();
-    stringToId.init();
+    u32 size = sizeof(bool) * dep::lexers.count;
+    bool *status = (bool*)mem::alloc(size);
     DEFER({
-        mem::uninit();     //NOTE: this free all the memory that was allocated before
-        printf("\nDone :)\n");
-    });
+            mem::free(status);
+            globals.uninit();
+            check::uninit();
+            printf("\nDone :)\n");
+            });
 #if(DBG)
-    for(u32 x=0; x<dependencyCount; x++){
-        FileEntity &fe = linearDepEntities[x];
-        printf("--------------FILE: %s--------------", fe.lexer.fileName);
-        //dbg::dumpLexerTokens(fe.lexer);
-        dbg::dumpASTFile(fe.file, fe.lexer);
+    for(u32 x=0; x<dep::lexers.count; x++){
+        Lexer &lexer = dep::lexers[x];
+        printf("--------------FILE: %s--------------", lexer.fileName);
+        //dbg::dumpLexerTokens(lexer);
+        dbg::dumpASTFile(dep::astFiles[x], lexer);
     }
 #endif
-    for(u32 x=dependencyCount; x > 0;){
+    memset(status, false, size);
+    for(u32 x=dep::deps.count; x > 0;){
         x -= 1;
-        FileEntity &fe = linearDepEntities[x];
-        if(!checkASTFile(fe.lexer, fe.file, globalScopes[x], globals, linearDepEntities)){
+        u32 id = dep::deps[x];
+        if(status[id] == true) continue;
+        status[id] = true;
+        if(!checkASTFile(dep::lexers[id], dep::astFiles[id], globals)){
             report::flushReports();
-            return EXIT_SUCCESS;
+            return EXIT_FAILURE;
         };
-        for(u32 x=0; x<scopeOff; x++) scopeAllocMem[x].uninit();
-        scopeOff = 0;
     };
     return EXIT_SUCCESS;
 };

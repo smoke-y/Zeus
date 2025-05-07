@@ -75,7 +75,10 @@ struct ASTAssDecl : ASTBase{
     ASTBase *rhs;
     ASTTypeNode *zType;
     u32 lhsCount;
-    u32 tokenOff;
+    union{
+        u32 tokenOff;
+        Type treeType;
+    };
 };
 struct ASTNum : ASTBase{
     union{
@@ -106,7 +109,6 @@ struct ASTFor : ASTBase{
     ASTBase *step;
     ASTBase *end;
     ASTBase **body;
-    VariableEntity *entity;
     u32 bodyCount;
     u32 tokenOff;
 };
@@ -171,17 +173,13 @@ struct ASTFile{
     DynamicArray<ASTBase*> nodes;
     DynamicArray<u32>      dependencies;
     u32 curPageWatermark;
+    u32 id;
 
-    void init();
+    void init(u32 astId);
     void uninit();
     ASTBase* newNode(u64 size, ASTType type);
     //bump-allocator for AST node members
     void* balloc(u64 size);
-};
-
-struct FileEntity{
-    Lexer lexer;
-    ASTFile file;
 };
 
 String makeStringFromTokOff(u32 x, Lexer &lexer);

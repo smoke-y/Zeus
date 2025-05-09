@@ -21,6 +21,7 @@
 #elif(LIN)
 #include <unistd.h>
 #include <fcntl.h>
+#include <errno.h>
 #endif
 
 #include "mem.cc"
@@ -31,3 +32,4 @@
 #include "parser.cc"
 #include "dependency.cc"
 #include "checker.cc"
+#include "llvm.cc"

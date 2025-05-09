@@ -110,7 +110,10 @@ struct ASTFor : ASTBase{
     ASTBase *end;
     ASTBase **body;
     u32 bodyCount;
-    u32 tokenOff;
+    union{
+        u32 tokenOff;
+        Type zType;
+    };
 };
 struct ASTProcDefDecl : ASTBase{
     String name;

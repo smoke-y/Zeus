@@ -44,4 +44,5 @@ struct Scope{
 
 namespace check{
     extern Scope *globalScopes;
+    extern HashmapStr stringToId;
 };

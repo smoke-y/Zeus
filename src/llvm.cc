@@ -1,3 +1,19 @@
+#include "../include/basic.hh"
+#include "../include/ds.hpp"
+#include "../include/parser.hh"
+#include "../include/checker.hh"
+#include "../include/dependency.hh"
+#include <stdarg.h>
+
+#define BUCKET_BUFFER_SIZE 1023
+#if(WIN)
+#define WRITE(file, buff, len) WriteFile(file, buff, len, nullptr, NULL)
+#elif(LIN)
+#define WRITE(file, buff, len) write(file, buff, len)
+#else
+#define WRITE(file, buff, len)
+#endif
+
 char *TypeToString[] ={
     "invalid",
     "i8",
@@ -148,12 +164,12 @@ void lowerASTNode(ASTBase *node, LLVMFile &file){
         }break;
         case ASTType::FOR:{
             ASTFor *For = (ASTFor*)node;
-            if(For->initializer){
-                Type type = For->entity->type;
+            if(For->decl){
+                Type type = For->zType;
                 char *typeStr = TypeToString[(u32)type];
-                u32 id = For->entity->id;
+                u32 id = ((ASTVariable*)(For->decl->lhs[0]))->entity->id;
                 file.write("%%r%d = alloca %s\n", id, typeStr);
-                u32 initReg = lowerExpression(For->initializer, type, file);
+                u32 initReg = lowerExpression(For->decl->rhs, type, file);
                 u32 endReg = lowerExpression(For->end, type, file);
                 u32 stepReg;
                 if(For->step) stepReg = lowerExpression(For->step, type, file);
@@ -188,22 +204,27 @@ void lowerASTNode(ASTBase *node, LLVMFile &file){
         }break;
     }
 };
+
 void lowerToLLVM(char *outputPath, DynamicArray<ASTBase*> &globals){
 #if(WIN)
     HANDLE file = CreateFile(outputPath, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
     DEFER(CloseHandle(file));
 #elif(LIN)
     int file = open(outputPath, O_RDWR|O_CREAT);
+    if(file<0){
+        printf("Error in opening %s: %d\n", outputPath, errno);
+        return;
+    };
     DEFER(close(file));
 #endif
     const u32 BUFF_SIZE = 1024;
     char buff[BUFF_SIZE];
     u32 cursor = 0;
     u32 temp;
-    for(u32 x=0,i=0; x<stringToId.count;){
-        if(stringToId.status[i]){
+    for(u32 x=0,i=0; x<check::stringToId.count;){
+        if(check::stringToId.status[i]){
 DUMP_STRINGS:
-            const String str = stringToId.keys[i];
+            const String str = check::stringToId.keys[i];
             temp = snprintf(buff+cursor, BUFF_SIZE-cursor, "@.str.%d = private unnamed_addr constant [%d x i8] c\"%.*s\\00\"\n", x, str.len+1, str.len, str.mem);
             if(temp+cursor > BUFF_SIZE){
                 WRITE(file, buff, cursor);
@@ -223,7 +244,7 @@ GLOBAL_WRITE_LLVM_TO_BUFF:
             case ASTType::STRING:{
                 ASTString *str = (ASTString*)assdecl->rhs;
                 u32 off;
-                stringToId.getValue(str->str, &off);
+                check::stringToId.getValue(str->str, &off);
                 temp = snprintf(buff+cursor, BUFF_SIZE-cursor, "@g%d = dso_local global ptr @.str.%d\n", var->entity->id, off);
             }break;
             case ASTType::CHARACTER:
@@ -240,11 +261,10 @@ GLOBAL_WRITE_LLVM_TO_BUFF:
         cursor += temp;
     };
     if(cursor) WRITE(file, buff, cursor);
-    for(u32 x=linearDepEntities.count; x > 0;){
+    for(u32 x=dep::astFiles.count; x > 0;){
         x -= 1;
-        FileEntity &fe = linearDepEntities[x];
-        if(fe.file.nodes.count == 0) continue;
-        ASTFile &astFile = fe.file;
+        ASTFile &astFile = dep::astFiles[x];
+        if(astFile.nodes.count == 0) continue;
         LLVMFile llvmFile;
         llvmFile.init();
         for(u32 x=0; x<astFile.nodes.count; x++) lowerASTNode(astFile.nodes[x], llvmFile);

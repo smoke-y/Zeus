@@ -21,7 +21,7 @@ namespace check{
     Scope *globalScopes;
     DynamicArray<Scope*> structScopes;
     DynamicArray<Scope*> blockScopes;
-    static HashmapStr stringToId;
+    HashmapStr stringToId;
     static HashmapStr structToOff;
     static DynamicArray<StructEntity> strucEntities;
 
@@ -365,6 +365,7 @@ u32 checkFor(ASTFor *For, DynamicArray<Scope*> &scopes, Lexer &lexer){
                 return false;
             };
         };
+        For->zType = startType;
     }else{
         //c-while
         if(!checkASTNode(lexer, For->expr, scopes)) return false;

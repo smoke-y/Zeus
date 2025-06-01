@@ -13,3 +13,22 @@ bool isInteger(Type type){
     };
     return false;
 };
+
+char *typeToStr[] = {
+    "invalid",
+    "bool",
+    "f64",
+    "s64",
+    "u64",
+    "f32",
+    "s32",
+    "u32",
+    "s16",
+    "u16",
+    "char",
+    "s8",
+    "u8",
+    "comp_decimal",
+    "comp_integer",
+    "comp_string",
+};

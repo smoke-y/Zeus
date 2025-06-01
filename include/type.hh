@@ -17,8 +17,11 @@ enum class Type{
     COMP_DECIMAL,
     COMP_INTEGER,
     COMP_STRING,
+    VOID,
     COUNT,
 };
 
 bool isNumber(Type type);
 bool isInteger(Type type);
+
+extern char *typeToStr[];

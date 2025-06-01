@@ -56,7 +56,7 @@ s32 main(s32 argc, char **argv){
         Lexer &lexer = dep::lexers[x];
         //printf("--------------FILE: %s--------------", lexer.fileName);
         //dbg::dumpLexerTokens(lexer);
-        //dbg::dumpASTFile(dep::astFiles[x], lexer);
+        dbg::dumpASTFile(dep::astFiles[x], lexer);
     }
 #endif
     memset(status, false, size);
@@ -70,6 +70,7 @@ s32 main(s32 argc, char **argv){
             return EXIT_FAILURE;
         };
     };
-    lowerToLLVM("bin/out.llvm", globals);
+    lowerToLLVM("bin/out.ll", globals);
+    system("clang bin/out.ll -o bin/out");
     return EXIT_SUCCESS;
 };

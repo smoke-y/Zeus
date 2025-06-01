@@ -14,7 +14,9 @@ namespace report{
     };
 
     extern Report errors[MAX_ERRORS];
+    extern Report warns[MAX_ERRORS];
     extern u8 errorOff;
+    extern u8 warnOff;
     extern char reportBuff[1024];
     extern u32 reportBuffTop; 
 

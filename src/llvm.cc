@@ -36,6 +36,7 @@ char *TypeToString[] ={
 struct LLVMBucket{
     char buff[BUCKET_BUFFER_SIZE+1];    //+1 for null byte
     LLVMBucket *next;
+    u32 len;
 };
 struct LLVMFile{
     DynamicArray<u32> tempRegs;
@@ -47,6 +48,7 @@ struct LLVMFile{
     void init(){
         start = (LLVMBucket*)mem::alloc(sizeof(LLVMBucket));
         start->next = nullptr;
+        start->len = 0;
         cur = start;
         cursor = 0;
         label = 0;
@@ -62,7 +64,7 @@ struct LLVMFile{
         s32 res = vsnprintf(&cur->buff[cursor], BUCKET_BUFFER_SIZE, fmt, args);
         va_end(args);
         if(res + cursor + 1 >= BUCKET_BUFFER_SIZE){
-            cur->buff[cursor] = '\0';
+            cur->len = cursor;
             LLVMBucket *buc = (LLVMBucket*)mem::alloc(sizeof(LLVMBucket));
             buc->buff[BUCKET_BUFFER_SIZE] = '\0';
             buc->next = nullptr;
@@ -74,21 +76,58 @@ struct LLVMFile{
             va_end(args);
         };
         cursor += res;
+        cur->len = cursor;
     };
 };
 
 char *getLLVMType(ASTTypeNode *node){
-    if(node->pointerDepth) return "ptr";
+    if(node->zType == Type::COMP_STRING || node->pointerDepth) return "ptr";
     return TypeToString[(u32)node->zType];
 }
 u32 lowerExpression(ASTBase *root, Type type, LLVMFile &file){
     u32 reg = file.newReg();
     switch(root->type){
+        case ASTType::STRING:{
+                                 ASTString *str = (ASTString*)root;
+                                 u32 id;
+                                 bool x =check::stringToId.getValue(str->str, &id);
+                                 file.write("%%e%d = load ptr, ptr @str.%d\n", reg, id);
+                             }break;
         case ASTType::INTEGER:{
-            ASTNum *num = (ASTNum*)root;
-            char *typeStr = TypeToString[(u32)type];
-            file.write("%%e%d = alloca %s\nstore %s %lld, ptr %%e%d\n", reg, typeStr, typeStr, num->integer, reg);
-        }break;
+                                  ASTNum *num = (ASTNum*)root;
+                                  char *typeStr = TypeToString[(u32)type];
+                                  file.write("%%e%d = alloca %s\nstore %s %lld, ptr %%e%d\n", reg, typeStr, typeStr, num->integer, reg);
+                              }break;
+        case ASTType::PROC_CALL:{
+                                    ASTProcCall *proc = (ASTProcCall*)root;
+                                    ProcEntity *entity = proc->entity;
+                                    u32 *inputRegs;
+                                    if(proc->argCount > 0) inputRegs = (u32*)mem::alloc(sizeof(u32)*proc->argCount);
+                                    for(u32 x=0; x<proc->argCount; x++){
+                                        inputRegs[x] = lowerExpression(proc->args[x], proc->types[x].zType, file);
+                                    };
+                                    char *type;
+                                    if(entity->outputCount == 0) type = "void";
+                                    else{
+                                        type = getLLVMType(entity->outputs[0]);
+                                        file.write("%%e%d = ", reg);
+                                    };
+                                    file.write("call %s @%.*s(", type, proc->name.len, proc->name.mem);
+                                    if(proc->argCount == 0){
+                                        file.write(")\n");
+                                        break;
+                                    };
+                                    for(u32 x=0;;){
+                                        ASTTypeNode *typeNode = &proc->types[x];
+                                        if(typeNode->pointerDepth > 0) type = "ptr";
+                                        else type = getLLVMType(typeNode);
+                                        file.write("%s %%e%d", type, inputRegs[x]);
+                                        if(++x == proc->argCount) break;
+                                        file.write(",");
+                                    };
+                                    file.write(")\n");
+                                    mem::free(inputRegs);
+                                }break;
     };
     return reg;
 }
@@ -99,109 +138,132 @@ inline void lowerBody(ASTBase **nodes, u32 count, LLVMFile &file){
 void lowerASTNode(ASTBase *node, LLVMFile &file){
     switch(node->type){
         case ASTType::RETURN:{
-            ASTReturn *ret = (ASTReturn*)node;
-            if(ret->retCount == 0){
-                file.write("ret void\n");
-            }else{
-                //TODO :
-            }
-        }break;
+                                 ASTReturn *ret = (ASTReturn*)node;
+                                 if(ret->retCount == 0){
+                                     file.write("ret void\n");
+                                 }else{
+                                     //TODO :
+                                 }
+                             }break;
         case ASTType::IF:{
-            ASTIf *If = (ASTIf*)node;
-            char *typeStr = TypeToString[(u32)If->zType];
-            u32 exprReg = lowerExpression(If->expr, If->zType, file);
-            u32 ifBodyLabel = file.label++;
-            u32 exitLabel = file.label++;
-            u32 ifReg = file.newReg();
-            u32 ifExprReg = file.newReg();
-            file.write("%%t%d = load %s, ptr %%e%d\n", ifExprReg, typeStr, exprReg);
-            file.write("%%t%d = icmp eq %s %%t%d, 0\n", ifReg, typeStr, ifExprReg);
-            file.write("br i1 %%t%d, label %%_%d, label %%_%d\n_%d:\n", ifReg, ifBodyLabel, exitLabel, ifBodyLabel);
-            lowerBody(If->ifBody, If->ifBodyCount, file);
-            file.write("br label %%_%d\n_%d:\n", exitLabel, exitLabel);
-            if(If->elseBodyCount) lowerBody(If->elseBody, If->elseBodyCount, file);
-        }break;
+                             ASTIf *If = (ASTIf*)node;
+                             char *typeStr = TypeToString[(u32)If->zType];
+                             u32 exprReg = lowerExpression(If->expr, If->zType, file);
+                             u32 ifBodyLabel = file.label++;
+                             u32 exitLabel = file.label++;
+                             u32 ifReg = file.newReg();
+                             u32 ifExprReg = file.newReg();
+                             file.write("%%t%d = load %s, ptr %%e%d\n", ifExprReg, typeStr, exprReg);
+                             file.write("%%t%d = icmp eq %s %%t%d, 0\n", ifReg, typeStr, ifExprReg);
+                             file.write("br i1 %%t%d, label %%_%d, label %%_%d\n_%d:\n", ifReg, ifBodyLabel, exitLabel, ifBodyLabel);
+                             lowerBody(If->ifBody, If->ifBodyCount, file);
+                             file.write("br label %%_%d\n_%d:\n", exitLabel, exitLabel);
+                             if(If->elseBodyCount) lowerBody(If->elseBody, If->elseBodyCount, file);
+                         }break;
+        case ASTType::PROC_DECL:{
+                                    ASTProcDefDecl *proc = (ASTProcDefDecl*)node;
+                                    char *type;
+                                    if(proc->outputCount == 0) type = "void";
+                                    else type = getLLVMType(proc->outputs[0]);
+                                    file.write("declare dso_local %s @%.*s(", type, proc->name.len, proc->name.mem);
+                                    for(u32 x=0;;){
+                                        ASTTypeNode *inputType = proc->typeInputs[x];
+                                        char *type = getLLVMType(inputType);
+                                        file.write("%s", type);
+                                        if(++x == proc->inputCount){
+                                            if(proc->varArgs) file.write(", ...");
+                                            break;
+                                        };
+                                        file.write(",");
+                                    };
+                                    file.write(")\n");
+                                }break;
         case ASTType::PROC_DEF:{
-            file.pushRegion();
-            ASTProcDefDecl *proc = (ASTProcDefDecl*)node;
-            char *type;
-            if(proc->outputCount == 0) type = "void";
-            else type = getLLVMType(proc->outputs[0]);
-            file.write("define dso_local %s @%.*s(", type, proc->name.len, proc->name.mem);
-            if(proc->inputCount){
-                u32 x=0;
-                while(true){
-                    char *type = getLLVMType(proc->inputs[x]->zType);
-                    ASTVariable **vars = (ASTVariable**)proc->inputs[x]->lhs;
-                    for(u32 i=0; i<proc->inputs[x]->lhsCount; i++){
-                        ASTVariable *var = vars[i];
-                        file.write("%s noundef %%%d", type, var->entity->id);
-                    }
-                    x++;
-                    if(x == proc->inputCount) break;
-                    file.write(",");
-                }
-            };
-            file.write("){\n");
-            for(u32 x=0; x<proc->bodyCount; x++) lowerASTNode(proc->body[x], file);
-            file.write("}\n");
-            file.popRegion();
-        }break;
+                                   file.pushRegion();
+                                   ASTProcDefDecl *proc = (ASTProcDefDecl*)node;
+                                   char *type;
+                                   if(proc->outputCount == 0) type = "void";
+                                   else type = getLLVMType(proc->outputs[0]);
+                                   file.write("define dso_local %s @%.*s(", type, proc->name.len, proc->name.mem);
+                                   if(proc->inputCount){
+                                       u32 x=0;
+                                       while(true){
+                                           char *type = getLLVMType(proc->inputs[x]->zType);
+                                           ASTVariable **vars = (ASTVariable**)proc->inputs[x]->lhs;
+                                           for(u32 i=0; i<proc->inputs[x]->lhsCount; i++){
+                                               ASTVariable *var = vars[i];
+                                               file.write("%s noundef %%%d", type, var->entity->id);
+                                           }
+                                           if(++x == proc->inputCount){
+                                               if(proc->varArgs) file.write(", ...");
+                                               break;
+                                           };
+                                           file.write(",");
+                                       }
+                                   };
+                                   file.write("){\n");
+                                   for(u32 x=0; x<proc->bodyCount; x++) lowerASTNode(proc->body[x], file);
+                                   file.write("}\n");
+                                   file.popRegion();
+                               }break;
         case ASTType::DECLERATION:{
-            ASTAssDecl *decl = (ASTAssDecl*)node;
-            Type type = (((ASTVariable*)(decl->lhs[0]))->entity->type);
-            u32 expReg = lowerExpression(decl->rhs, type, file);
-            char *typeStr = TypeToString[(u32)type];
-            ASTVariable **vars = (ASTVariable**)decl->lhs;
-            for(u32 x=0; x<decl->lhsCount; x++){
-                ASTVariable *var = vars[x];
-                u32 id = var->entity->id;
-                u32 tempReg = file.newReg();
-                file.write("%%r%d = alloca %s\n", id, typeStr);
-                file.write("%%t%d = load %s, ptr %%e%d\n", tempReg, typeStr, expReg);
-                file.write("store %s %%t%d, ptr %%r%d\n", typeStr, tempReg, id);
-            }
-        }break;
+                                      ASTAssDecl *decl = (ASTAssDecl*)node;
+                                      Type type = (((ASTVariable*)(decl->lhs[0]))->entity->type);
+                                      u32 expReg = lowerExpression(decl->rhs, type, file);
+                                      char *typeStr = TypeToString[(u32)type];
+                                      ASTVariable **vars = (ASTVariable**)decl->lhs;
+                                      for(u32 x=0; x<decl->lhsCount; x++){
+                                          ASTVariable *var = vars[x];
+                                          u32 id = var->entity->id;
+                                          u32 tempReg = file.newReg();
+                                          file.write("%%r%d = alloca %s\n", id, typeStr);
+                                          file.write("%%t%d = load %s, ptr %%e%d\n", tempReg, typeStr, expReg);
+                                          file.write("store %s %%t%d, ptr %%r%d\n", typeStr, tempReg, id);
+                                      }
+                                  }break;
         case ASTType::FOR:{
-            ASTFor *For = (ASTFor*)node;
-            if(For->decl){
-                Type type = For->zType;
-                char *typeStr = TypeToString[(u32)type];
-                u32 id = ((ASTVariable*)(For->decl->lhs[0]))->entity->id;
-                file.write("%%r%d = alloca %s\n", id, typeStr);
-                u32 initReg = lowerExpression(For->decl->rhs, type, file);
-                u32 endReg = lowerExpression(For->end, type, file);
-                u32 stepReg;
-                if(For->step) stepReg = lowerExpression(For->step, type, file);
-                else{
-                    stepReg = file.newReg();
-                    file.write("%%e%d = alloca %s\nstore %s 1, ptr %%e%d\n", stepReg, typeStr, typeStr, stepReg);
-                };
-                u32 tmpReg =file.newReg();
-                file.write("%%t%d = load %s, ptr %%e%d\n", tmpReg, typeStr, initReg);
-                file.write("store %s %%t%d, ptr %%r%d\n", typeStr, tmpReg, id);
-                u32 cmpLabel = file.label++;
-                u32 bdyLabel = file.label++;
-                u32 exitLabel = file.label++;
-                u32 cmpLoadReg1 = file.newReg();
-                u32 cmpLoadReg2 = file.newReg();
-                u32 cmpResReg = file.newReg();
-                file.write("br label %%_%d\n_%d:\n%%t%d = load %s, ptr %%r%d\n", cmpLabel, cmpLabel, cmpLoadReg1, typeStr, id);
-                file.write("%%t%d = load %s, ptr %%e%d\n", cmpLoadReg2, typeStr, endReg);
-                file.write("%%t%d = icmp eq %s %%t%d, %%t%d\n", cmpResReg, typeStr, cmpLoadReg1, cmpLoadReg2);
-                file.write("br i1 %%t%d, label %%_%d, label %%_%d\n", cmpResReg, bdyLabel, exitLabel);
-                file.write("_%d:\n", bdyLabel);
-                lowerBody(For->body, For->bodyCount, file);
-                u32 updReg1 = file.newReg();
-                u32 updReg2 = file.newReg();
-                u32 updReg3 = file.newReg();
-                file.write("%%t%d = load %s, ptr %%e%d\n", updReg1, typeStr, stepReg);
-                file.write("%%t%d = load %s, ptr %%r%d\n", updReg2, typeStr, id);
-                file.write("%%t%d = add nsw %s %%t%d, %%t%d\n", updReg3, typeStr, updReg1, updReg2);
-                file.write("store %s %%t%d, ptr %%r%d\nbr label %%_%d\n", typeStr, updReg3, id, cmpLabel);
-                file.write("_%d:\n", exitLabel);
-            };
-        }break;
+                              ASTFor *For = (ASTFor*)node;
+                              if(For->decl){
+                                  Type type = For->zType;
+                                  char *typeStr = TypeToString[(u32)type];
+                                  u32 id = ((ASTVariable*)(For->decl->lhs[0]))->entity->id;
+                                  file.write("%%r%d = alloca %s\n", id, typeStr);
+                                  u32 initReg = lowerExpression(For->decl->rhs, type, file);
+                                  u32 endReg = lowerExpression(For->end, type, file);
+                                  u32 stepReg;
+                                  if(For->step) stepReg = lowerExpression(For->step, type, file);
+                                  else{
+                                      stepReg = file.newReg();
+                                      file.write("%%e%d = alloca %s\nstore %s 1, ptr %%e%d\n", stepReg, typeStr, typeStr, stepReg);
+                                  };
+                                  u32 tmpReg =file.newReg();
+                                  file.write("%%t%d = load %s, ptr %%e%d\n", tmpReg, typeStr, initReg);
+                                  file.write("store %s %%t%d, ptr %%r%d\n", typeStr, tmpReg, id);
+                                  u32 cmpLabel = file.label++;
+                                  u32 bdyLabel = file.label++;
+                                  u32 exitLabel = file.label++;
+                                  u32 cmpLoadReg1 = file.newReg();
+                                  u32 cmpLoadReg2 = file.newReg();
+                                  u32 cmpResReg = file.newReg();
+                                  file.write("br label %%_%d\n_%d:\n%%t%d = load %s, ptr %%r%d\n", cmpLabel, cmpLabel, cmpLoadReg1, typeStr, id);
+                                  file.write("%%t%d = load %s, ptr %%e%d\n", cmpLoadReg2, typeStr, endReg);
+                                  file.write("%%t%d = icmp eq %s %%t%d, %%t%d\n", cmpResReg, typeStr, cmpLoadReg1, cmpLoadReg2);
+                                  file.write("br i1 %%t%d, label %%_%d, label %%_%d\n", cmpResReg, bdyLabel, exitLabel);
+                                  file.write("_%d:\n", bdyLabel);
+                                  lowerBody(For->body, For->bodyCount, file);
+                                  u32 updReg1 = file.newReg();
+                                  u32 updReg2 = file.newReg();
+                                  u32 updReg3 = file.newReg();
+                                  file.write("%%t%d = load %s, ptr %%e%d\n", updReg1, typeStr, stepReg);
+                                  file.write("%%t%d = load %s, ptr %%r%d\n", updReg2, typeStr, id);
+                                  file.write("%%t%d = add nsw %s %%t%d, %%t%d\n", updReg3, typeStr, updReg1, updReg2);
+                                  file.write("store %s %%t%d, ptr %%r%d\nbr label %%_%d\n", typeStr, updReg3, id, cmpLabel);
+                                  file.write("_%d:\n", exitLabel);
+                              };
+                          }break;
+        default:{
+                    lowerExpression(node, Type::INVALID, file);
+                }break;
     }
 };
 
@@ -210,7 +272,7 @@ void lowerToLLVM(char *outputPath, DynamicArray<ASTBase*> &globals){
     HANDLE file = CreateFile(outputPath, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
     DEFER(CloseHandle(file));
 #elif(LIN)
-    int file = open(outputPath, O_RDWR|O_CREAT);
+    int file = open(outputPath, O_TRUNC|O_WRONLY|O_CREAT, 0644);   // read/write permision
     if(file<0){
         printf("Error in opening %s: %d\n", outputPath, errno);
         return;
@@ -225,7 +287,7 @@ void lowerToLLVM(char *outputPath, DynamicArray<ASTBase*> &globals){
         if(check::stringToId.status[i]){
 DUMP_STRINGS:
             const String str = check::stringToId.keys[i];
-            temp = snprintf(buff+cursor, BUFF_SIZE-cursor, "@.str.%d = private unnamed_addr constant [%d x i8] c\"%.*s\\00\"\n", x, str.len+1, str.len, str.mem);
+            temp = snprintf(buff+cursor, BUFF_SIZE-cursor, "@.str.%d = private unnamed_addr constant [%d x i8] c\"%.*s\\00\"\n@str.%d = dso_local global ptr @.str.%d\n", x, str.len+1, str.len, str.mem, x, x);
             if(temp+cursor > BUFF_SIZE){
                 WRITE(file, buff, cursor);
                 cursor = 0;
@@ -242,16 +304,16 @@ DUMP_STRINGS:
 GLOBAL_WRITE_LLVM_TO_BUFF:
         switch(assdecl->rhs->type){
             case ASTType::STRING:{
-                ASTString *str = (ASTString*)assdecl->rhs;
-                u32 off;
-                check::stringToId.getValue(str->str, &off);
-                temp = snprintf(buff+cursor, BUFF_SIZE-cursor, "@g%d = dso_local global ptr @.str.%d\n", var->entity->id, off);
-            }break;
+                                     ASTString *str = (ASTString*)assdecl->rhs;
+                                     u32 off;
+                                     check::stringToId.getValue(str->str, &off);
+                                     temp = snprintf(buff+cursor, BUFF_SIZE-cursor, "@g%d = dso_local global ptr @.str.%d\n", var->entity->id, off);
+                                 }break;
             case ASTType::CHARACTER:
             case ASTType::INTEGER:{
-                ASTNum *num = (ASTNum*)assdecl->rhs;
-                temp = snprintf(buff+cursor, BUFF_SIZE-cursor, "@g%d = dso_local global %s %lld\n", var->entity->id, TypeToString[(u32)var->entity->type], num->integer);
-            }break;
+                                      ASTNum *num = (ASTNum*)assdecl->rhs;
+                                      temp = snprintf(buff+cursor, BUFF_SIZE-cursor, "@g%d = dso_local global %s %lld\n", var->entity->id, TypeToString[(u32)var->entity->type], num->integer);
+                                  }break;
         };
         if(temp + cursor >= BUFF_SIZE){
             WRITE(file, buff, cursor);
@@ -271,10 +333,11 @@ GLOBAL_WRITE_LLVM_TO_BUFF:
         llvmFile.uninit();
         LLVMBucket *buc = llvmFile.start;
         while(buc){
-            WRITE(file, buc->buff, strlen(buc->buff));
+            WRITE(file, buc->buff, buc->len);
             LLVMBucket *temp = buc;
             buc = buc->next;
             mem::free(temp);
         };
     };
+    WRITE(file, "\n\0", 2);
 };

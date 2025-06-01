@@ -31,7 +31,8 @@ enum class TokType {
     K_S8,
     K_U8,
     K_TYPE_END,    //type end
-    K_PROC,
+    K_PROC_DEF,
+    K_PROC_DECL,
     K_IF,
     K_STRUCT,
     K_FOR,
@@ -59,6 +60,7 @@ struct Lexer{
 
     bool init(char *fn);
     void uninit();
+    void emitWarn(u32 off, char *fmt, ...);
     void emitErr(u32 off, char *fmt, ...);
     void emitErrAbs(u32 off, char *fmt, ...);
     b32 genTokens();

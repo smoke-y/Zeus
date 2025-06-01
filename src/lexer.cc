@@ -19,7 +19,8 @@ namespace Word{
         {"s8", TokType::K_S8},
         {"s16", TokType::K_S16},
         {"s32", TokType::K_S32 },
-        {"proc", TokType::K_PROC},
+        {"proc", TokType::K_PROC_DEF},
+        {"proc_decl", TokType::K_PROC_DECL},
         {"if", TokType::K_IF},
         {"struct", TokType::K_STRUCT},
         {"true", TokType::K_TRUE},
@@ -68,6 +69,7 @@ b32 isNum(char x){return (x >= '0' && x <= '9');};
 bool Lexer::init(char *fn){
     char tempBuff[100];
     u32 len;
+    fileName = nullptr;
 #if(WIN)
     len = GetFullPathNameA(fn, 1024, tempBuff, NULL);
 #elif(LIN)
@@ -95,37 +97,48 @@ bool Lexer::init(char *fn){
     return true;
 };
 void Lexer::uninit(){
-    mem::free(fileName);
-    tokenTypes.uninit();
-    tokenOffsets.uninit();
+    if(fileName){
+        mem::free(fileName);
+        tokenTypes.uninit();
+        tokenOffsets.uninit();
+    };
 };
 void Lexer::emitErrAbs(u32 off, char *fmt, ...) {
     if(report::errorOff == MAX_ERRORS) return;
-    report::Report &rep = report::errors[report::errorOff];
-    report::errorOff += 1;
+    report::Report &rep = report::errors[report::errorOff++];
     rep.fileName = fileName;
     rep.off = off;
     rep.fileContent = fileContent;
     rep.msg = report::reportBuff + report::reportBuffTop;
     va_list args;
     va_start(args, fmt);
-    report::reportBuffTop += vsprintf(report::reportBuff, fmt, args);
+    report::reportBuffTop += vsprintf(rep.msg, fmt, args)+1;
     va_end(args);
 };
 void Lexer::emitErr(u32 off, char *fmt, ...) {
     if(report::errorOff == MAX_ERRORS) return;
-    report::Report &rep = report::errors[report::errorOff];
-    report::errorOff += 1;
+    report::Report &rep = report::errors[report::errorOff++];
     rep.fileName = fileName;
     rep.off = tokenOffsets[off].off;
     rep.fileContent = fileContent;
     rep.msg = report::reportBuff + report::reportBuffTop;
     va_list args;
     va_start(args, fmt);
-    report::reportBuffTop += vsprintf(report::reportBuff, fmt, args);
+    report::reportBuffTop += vsprintf(rep.msg, fmt, args)+1;
     va_end(args);
 };
-
+void Lexer::emitWarn(u32 off, char *fmt, ...) {
+    if(report::warnOff == MAX_ERRORS) return;
+    report::Report &rep = report::warns[report::warnOff++];
+    rep.fileName = fileName;
+    rep.off = tokenOffsets[off].off;
+    rep.fileContent = fileContent;
+    rep.msg = report::reportBuff + report::reportBuffTop;
+    va_list args;
+    va_start(args, fmt);
+    report::reportBuffTop += vsprintf(rep.msg, fmt, args)+1;
+    va_end(args);
+};
 
 b32 Lexer::genTokens() {
     char *src = fileContent;

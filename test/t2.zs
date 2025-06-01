@@ -8,6 +8,7 @@ goo :: struct{
 
 x: u32 = 2
 
-foo :: proc(x: s32) -> (u32){
+main :: proc(x: s32) -> u32{
     y: u32 = 4
+    return y
 }

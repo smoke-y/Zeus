@@ -50,6 +50,8 @@ enum class ASTType{
 };
 
 struct VariableEntity;
+struct ProcEntity;
+
 struct ASTBase{
     ASTType type;
 };
@@ -117,10 +119,14 @@ struct ASTFor : ASTBase{
 };
 struct ASTProcDefDecl : ASTBase{
     String name;
-    ASTAssDecl  **inputs;
+    union{
+        ASTAssDecl  **inputs;
+        ASTTypeNode **typeInputs;
+    };
     ASTTypeNode **outputs;
     ASTBase     **body;
     u32 inputCount;
+    bool varArgs;
     u32 outputCount;
     u32 bodyCount;
     u32 tokenOff;
@@ -151,6 +157,8 @@ struct ASTModifier : ASTBase{
 struct ASTProcCall : ASTBase{
     String name;
     ASTBase **args;
+    ASTTypeNode *types;
+    ProcEntity *entity;
     u32 argCount;
     u32 tokenOff;
 };
@@ -168,6 +176,7 @@ struct ASTString : ASTBase{
 };
 struct ASTReturn : ASTBase{
     ASTBase **exprs;
+    u32 tokenOff;
     u32 retCount;
 };
 

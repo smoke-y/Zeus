@@ -23,10 +23,15 @@ struct StructEntity{
     u64 size;
 };
 struct ProcEntity{
-    ASTAssDecl  **inputs;
+    union{
+        ASTAssDecl  **inputs;
+        ASTTypeNode **typeInputs;
+    };
     ASTTypeNode **outputs;
     u32 outputCount;
     u32 inputCount;
+    bool varArgs;
+    bool isDecl;
 };
 
 struct Scope{

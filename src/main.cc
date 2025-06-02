@@ -18,10 +18,12 @@ s32 main(s32 argc, char **argv){
     Word::init(Word::keywords, Word::keywordsData, ARRAY_LENGTH(Word::keywordsData));
     Word::init(Word::poundwords, Word::poundwordsData, ARRAY_LENGTH(Word::poundwordsData));
     dep::init();
+    deferStatements.init();
     DEFER({
             Word::uninit(Word::keywords);
             Word::uninit(Word::poundwords);
             dep::uninit();
+            deferStatements.uninit();
             mem::uninit();
             });
     s32 mainFileId = dep::insertFileToDepsAndInitLexer({inputPath, (u32)strlen(inputPath)});
@@ -61,7 +63,7 @@ s32 main(s32 argc, char **argv){
         Lexer &lexer = dep::lexers[x];
         //printf("--------------FILE: %s--------------", lexer.fileName);
         //dbg::dumpLexerTokens(lexer);
-        //dbg::dumpASTFile(dep::astFiles[x], lexer);
+        dbg::dumpASTFile(dep::astFiles[x], lexer);
     }
 #endif
     memset(status, false, size);
@@ -77,7 +79,7 @@ s32 main(s32 argc, char **argv){
     };
     lowerToLLVM("bin/out.ll", globals);
     char instrBuff[1025];
-    u32 curs = snprintf(instrBuff, 1025, "clang ");
+    u32 curs = snprintf(instrBuff, 1025, "clang -Wno-override-module ");
     for(u32 x=0; x<(u32)LinkConfigCLibs::COUNT; x++){
         if(IS_BIT(genConfig.linkCLibs, x)){
             curs += snprintf(instrBuff+curs, 1025-curs, "-l%s ", LinkConfigCLibsToStr[x]);

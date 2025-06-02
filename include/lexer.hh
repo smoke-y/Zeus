@@ -36,6 +36,7 @@ enum class TokType {
     K_IF,
     K_STRUCT,
     K_FOR,
+    K_DEFER,
     K_CONSTANT,
     K_RETURN,
     K_ELSE,

@@ -194,3 +194,5 @@ struct ASTFile{
 };
 
 String makeStringFromTokOff(u32 x, Lexer &lexer);
+
+extern DynamicArray<ASTBase*> deferStatements;

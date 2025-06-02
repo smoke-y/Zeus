@@ -3,6 +3,8 @@
 #include "../include/genConfig.hh"
 #include <cstring>
 
+DynamicArray<ASTBase*> deferStatements;
+
 void ASTFile::init(u32 astId){
     id = astId;
     pages.init();
@@ -479,6 +481,7 @@ ASTBase** parseBody(Lexer &lexer, ASTFile &file, u32 &xArg, u32 &count, bool ins
     if(insertDefaultRet && (bodyTable[bodyTable.count-1]->type != ASTType::RETURN)){
         ASTReturn * ret = (ASTReturn*)file.newNode(sizeof(ASTReturn), ASTType::RETURN);
         ret->retCount = 0;
+        for(u32 x=0; x<deferStatements.count; x++) bodyTable.push(deferStatements[x]);
         bodyTable.push(ret);
     };
     u32 size = sizeof(ASTBase*) * bodyTable.count;
@@ -826,11 +829,14 @@ ASTProcDefDecl *parseProcDef(Lexer &lexer, ASTFile &file, u32 &xArg){
     }else proc->outputCount = 0;
     u32 count;
     ASTBase **body = parseBody(lexer, file, x, count, proc->outputCount == 0);
+    deferStatements.count = 0;
     if(body == nullptr) return nullptr;
     proc->body = body;
     proc->bodyCount = count;
     return proc;
 };
+
+
 bool parseBlock(Lexer &lexer, ASTFile &file, DynamicArray<ASTBase*> &table, u32 &xArg){
     BRING_TOKENS_TO_SCOPE;
     u32 x = xArg;
@@ -872,7 +878,25 @@ bool parseBlock(Lexer &lexer, ASTFile &file, DynamicArray<ASTBase*> &table, u32 
                                    file.dependencies.push(stat);
                                    x++;
                                }break;
+        case TokType::K_DEFER:{
+                                  x++;
+                                  if(tokTypes[x] == (TokType)'{'){
+                                      u32 start = x;
+                                      x = eatNewLine(lexer.tokenTypes, x+1);
+                                      while(tokTypes[x] != (TokType)'}'){
+                                          if(!parseBlock(lexer, file, deferStatements, x)) return false;
+                                          if(tokTypes[x] == TokType::END_OF_FILE){
+                                              lexer.emitErr(start, "Expected closing '}'");
+                                              return false;
+                                          };
+                                      };
+                                      x++;
+                                      break;
+                                  };
+                                  if(!parseBlock(lexer, file, deferStatements, x)) return false;
+                              }break;
         case TokType::K_RETURN:{
+                                   for(u32 x=0; x<deferStatements.count; x++) table.push(deferStatements[x]);
                                    ASTReturn *ret = (ASTReturn*)file.newNode(sizeof(ASTReturn), ASTType::RETURN);
                                    ret->tokenOff = x++;
                                    s32 nend = getTokenOff((TokType)'\n', lexer, x);

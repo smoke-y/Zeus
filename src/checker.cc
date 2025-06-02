@@ -349,18 +349,6 @@ u64 checkDecl(ASTAssDecl *assdecl, DynamicArray<Scope*> &scopes, Lexer &lexer){
     for(u32 x=0; x<assdecl->lhsCount; x++){
         ASTBase *lhsNode = assdecl->lhs[x];
         if(getVariableEntity(lhsNode, scopes)){
-            u32 off;
-            switch(lhsNode->type){
-                case ASTType::VARIABLE:{
-                                           ASTVariable *var = (ASTVariable*)lhsNode;
-                                           off = var->tokenOff;
-                                       }break;
-                case ASTType::MODIFIER:{
-                                           ASTModifier *mod = (ASTModifier*)lhsNode;
-                                           off = mod->tokenOff;
-                                       }break;
-                default: UNREACHABLE;
-            }
             lexer.emitErr(tokenOff, "Redefinition");
             return 0;
         };
@@ -664,7 +652,17 @@ bool checkASTNode(Lexer &lexer, ASTBase *node, DynamicArray<Scope*> &scopes){
     u32 newId = scope->varId;
     DEFER(scope->varId = newId);
     switch(node->type){
-        case ASTType::RETURN: return true;
+        case ASTType::RETURN:{
+                                 ASTReturn *ret = (ASTReturn*)node;
+                                 for(u32 x=0; x<ret->retCount; x++){
+                                     u32 pd;
+                                     Type type = checkTree(lexer, ret->exprs[x], scopes, pd);
+                                     if(type == Type::INVALID) return false;
+                                     ASTTypeNode *typeNode = &ret->types[x];
+                                     typeNode->zType = type;
+                                     typeNode->pointerDepth = pd;
+                                 };
+                             }break;
         case ASTType::FOR:{
                               newId = checkFor((ASTFor*)node, scopes, lexer);
                               if(newId == 0) return false;
@@ -717,7 +715,11 @@ bool checkASTFile(Lexer &lexer, ASTFile &file, DynamicArray<ASTBase*> &globals){
             case ASTType::DECLERATION:{
                                           ASTAssDecl *assdecl = (ASTAssDecl*)node;
                                           if(assdecl->lhsCount > 1){
-                                              lexer.emitErr(lexer.tokenOffsets[assdecl->tokenOff].off, "In the global scope, lhs count has to be 1");
+                                              lexer.emitErr(assdecl->tokenOff, "In the global scope, lhs count has to be 1");
+                                              return false;
+                                          };
+                                          if(assdecl->lhs[0]->type != ASTType::VARIABLE){
+                                              lexer.emitErr(assdecl->tokenOff, "In the global scope, lhs has to be a variable");
                                               return false;
                                           };
                                           switch(assdecl->rhs->type){
@@ -726,19 +728,23 @@ bool checkASTFile(Lexer &lexer, ASTFile &file, DynamicArray<ASTBase*> &globals){
                                               case ASTType::CHARACTER:
                                               case ASTType::STRING: break;
                                               default:{
-                                                          lexer.emitErr(lexer.tokenOffsets[assdecl->tokenOff].off, "In the global scope, rhs has to be an integer, decimal, character or a string. No expressions allowed");
+                                                          lexer.emitErr(assdecl->tokenOff, "In the global scope, rhs has to be an integer, decimal, character or a string. No expressions allowed");
                                                           return false;
                                                       }break;
                                           };
-                                          for(u32 y=0; y<curFileOff; y++){
-                                              u32 off;
+                                          for(u32 y=curFileOff; y<dep::fileToId.count-1; y++){
+                                              const u32 fileOff = y+1;
                                               ASTVariable *var = (ASTVariable*)assdecl->lhs[0];
-                                              if(check::globalScopes[y].var.getValue(var->name, &off)){
-                                                  lexer.emitErr(lexer.tokenOffsets[assdecl->tokenOff].off, "Variable already declared at global scope in %s",dep::lexers[y].fileName);
-                                                  return false;
+                                              if(check::globalScopes[fileOff].var.count > 0){
+                                                  u32 off;
+                                                  if(check::globalScopes[fileOff].var.getValue(var->name, &off)){
+                                                      lexer.emitErr(assdecl->tokenOff, "Variable already declared at global scope in %s",dep::lexers[fileOff].fileName);
+                                                      return false;
+                                                  };
                                               };
                                           };
-                                          //TODO: Give them global id
+                                          ASTVariable *var = (ASTVariable*)assdecl->lhs[0];
+                                          var->entity->id = globals.count;
                                           globals.push(node);
                                           ASTBase *lastNode = file.nodes.pop();
                                           if(lastNode != node){

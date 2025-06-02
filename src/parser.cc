@@ -501,6 +501,8 @@ ASTAssDecl* parseAssDecl(Lexer &lexer, ASTFile &file, u32 &xArg, u32 ending = 0)
     if(!var) return nullptr;
     lhs.push(var);
     u32 lhsCount = 1;
+    ASTAssDecl *assdecl = (ASTAssDecl*)file.newNode(sizeof(ASTAssDecl), ASTType::DECLERATION);
+    assdecl->tokenOff = x;
     x++;
     while(tokTypes[x] != (TokType)':' && tokTypes[x] != (TokType)'='){
         if(tokTypes[x] != (TokType)','){
@@ -514,7 +516,6 @@ ASTAssDecl* parseAssDecl(Lexer &lexer, ASTFile &file, u32 &xArg, u32 ending = 0)
         lhsCount++;
         lhs.push(var);
     };
-    ASTAssDecl *assdecl = (ASTAssDecl*)file.newNode(sizeof(ASTAssDecl), ASTType::DECLERATION);
     assdecl->zType = nullptr;
     u32 size = sizeof(ASTBase*)*lhsCount;
     ASTBase **lhsNodes = (ASTBase**)file.balloc(size);
@@ -532,7 +533,6 @@ ASTAssDecl* parseAssDecl(Lexer &lexer, ASTFile &file, u32 &xArg, u32 ending = 0)
             };
         };
     };
-    assdecl->tokenOff = x;
     x++;
     if(ending == 0) ending = getEnding(tokTypes, x);
     ASTBase *expr = genASTExprTree(lexer, file, x, ending);
@@ -878,6 +878,7 @@ bool parseBlock(Lexer &lexer, ASTFile &file, DynamicArray<ASTBase*> &table, u32 
                                        memcpy(ret->exprs, rets.mem, count);
                                    };
                                    ret->retCount = rets.count;
+                                   ret->types = (ASTTypeNode*)mem::alloc(sizeof(ASTTypeNode) * rets.count);
                                    table.push(ret);
                                    x++;
                                }break;

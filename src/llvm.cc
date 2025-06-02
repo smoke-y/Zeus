@@ -53,6 +53,7 @@ struct LLVMFile{
         cursor = 0;
         label = 0;
         tempRegs.init();
+        tempRegs.push(0);
     };
     void uninit(){tempRegs.uninit();}
     u32 newReg(){return tempRegs[tempRegs.count-1]++;};
@@ -87,10 +88,19 @@ char *getLLVMType(ASTTypeNode *node){
 u32 lowerExpression(ASTBase *root, Type type, LLVMFile &file){
     u32 reg = file.newReg();
     switch(root->type){
+        case ASTType::VARIABLE:{
+                                   ASTVariable *var = (ASTVariable*)root;
+                                   VariableEntity *entity = var->entity;
+                                   ASTTypeNode typeNode;
+                                   typeNode.zType = entity->type;
+                                   typeNode.pointerDepth = var->pAccessDepth;
+                                   char *type = getLLVMType(&typeNode);
+                                   file.write("%%e%d = load %s, ptr %%r%d\n", reg, type, entity->id);
+                               }break;
         case ASTType::STRING:{
                                  ASTString *str = (ASTString*)root;
                                  u32 id;
-                                 bool x =check::stringToId.getValue(str->str, &id);
+                                 bool x = check::stringToId.getValue(str->str, &id);
                                  file.write("%%e%d = load ptr, ptr @str.%d\n", reg, id);
                              }break;
         case ASTType::INTEGER:{
@@ -141,9 +151,11 @@ void lowerASTNode(ASTBase *node, LLVMFile &file){
                                  ASTReturn *ret = (ASTReturn*)node;
                                  if(ret->retCount == 0){
                                      file.write("ret void\n");
-                                 }else{
-                                     //TODO :
-                                 }
+                                     break;
+                                 };
+                                 u32 reg = lowerExpression(ret->exprs[0], Type::INVALID, file);
+                                 char *type = getLLVMType(&ret->types[0]);
+                                 file.write("ret %s %%e%d\n", type, reg);
                              }break;
         case ASTType::IF:{
                              ASTIf *If = (ASTIf*)node;

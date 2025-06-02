@@ -77,10 +77,8 @@ struct ASTAssDecl : ASTBase{
     ASTBase *rhs;
     ASTTypeNode *zType;
     u32 lhsCount;
-    union{
-        u32 tokenOff;
-        Type treeType;
-    };
+    u32 tokenOff;
+    Type treeType;
 };
 struct ASTNum : ASTBase{
     union{
@@ -176,6 +174,7 @@ struct ASTString : ASTBase{
 };
 struct ASTReturn : ASTBase{
     ASTBase **exprs;
+    ASTTypeNode *types;
     u32 tokenOff;
     u32 retCount;
 };

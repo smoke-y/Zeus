@@ -1,3 +1,5 @@
+#import "test/t3.zs"
+
 foo :: struct{
     x: s32
     y: s32

@@ -45,6 +45,7 @@ enum class TokType {
 
     P_START,     //poundwords start
     P_IMPORT,
+    P_LINK,
     P_END,       //poundwords end
 };
 struct TokenOffset {

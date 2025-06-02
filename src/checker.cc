@@ -317,7 +317,7 @@ u64 checkDecl(ASTAssDecl *assdecl, DynamicArray<Scope*> &scopes, Lexer &lexer){
     u32 typePointerDepth;
     Type typeType = Type::INVALID;
     u32 tokenOff = assdecl->tokenOff;
-    if(assdecl->zType){
+    if(assdecl->zType->zType != Type::INVALID){
         if(!fillTypeInfo(lexer, assdecl->zType)) return 0;
         ASTTypeNode *type = assdecl->zType;
         typeType = type->zType;
@@ -469,6 +469,7 @@ bool checkProcDef(ASTProcDefDecl *proc, DynamicArray<Scope*> &scopes, Lexer &lex
     ProcEntity *entity = (ProcEntity*)mem::alloc(sizeof(ProcEntity));
     scope->procs.push(entity);
     Scope *body = check::newBlockScope(0);
+    entity->isDecl = false;
     entity->varArgs = proc->varArgs;
     entity->inputs = proc->inputs;
     entity->inputCount = proc->inputCount;

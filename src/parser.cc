@@ -1,5 +1,6 @@
 #include "../include/parser.hh"
 #include "../include/dependency.hh"
+#include "../include/genConfig.hh"
 #include <cstring>
 
 void ASTFile::init(u32 astId){
@@ -839,13 +840,30 @@ bool parseBlock(Lexer &lexer, ASTFile &file, DynamicArray<ASTBase*> &table, u32 
             xArg = x;
             });
     switch(tokTypes[x]){
+        case TokType::P_LINK:{
+                                 if(tokTypes[++x] != TokType::DOUBLE_QUOTES){
+                                     lexer.emitErr(x, "Expected a string");
+                                     return false;
+                                 };
+                                 String name = makeStringFromTokOff(x, lexer);
+                                 if(cmpString(name, "libc")){
+                                     SET_BIT(genConfig.linkCLibs, LinkConfigCLibs::LIBC);
+                                 };
+                                 x++;
+                             }break;
         case TokType::P_IMPORT:{
                                    if(tokTypes[++x] != TokType::DOUBLE_QUOTES){
                                        lexer.emitErr(x, "Expected a string");
                                        return false;
                                    };
-                                   dep::insertCallFrameIfNotInserted(file.id);
                                    String name = makeStringFromTokOff(x, lexer);
+                                   u32 libLen = strlen("lib/x.zs");
+                                   bool stdlib = false;
+                                   if(name.len > libLen){
+                                       if(memcmp("lib/", name.mem, strlen("lib/")) == 0) stdlib = true;
+                                       //TODO: maybe I have to fix up path??? idk
+                                   };
+                                   dep::insertCallFrameIfNotInserted(file.id);
                                    s32 stat = dep::insertFileToDepsAndInitLexer(name);
                                    if(stat == -2){
                                        lexer.emitErr(x, "Circular import detected\n");
@@ -1048,21 +1066,21 @@ namespace dbg{
                                      dumpASTBody(Struct->body, Struct->bodyCount, lexer, padding+1);
                                  }break;
             case ASTType::PROC_DECL:{
-                                       ASTProcDefDecl *proc = (ASTProcDefDecl*)node;
-                                       printf("proc_decl");
-                                       PLOG("name: %.*s", proc->name.len, proc->name.mem);
-                                       if(proc->varArgs){
-                                           PLOG("var_args: true");
-                                       };
-                                       if(proc->inputCount){
-                                           PLOG("input:");
-                                           dumpASTBody((ASTBase**)proc->inputs, proc->inputCount, lexer, padding+1);
-                                       };
-                                       if(proc->outputCount){
-                                           PLOG("output:");
-                                           dumpASTBody((ASTBase**)proc->outputs, proc->outputCount, lexer, padding+1);
-                                       }
-                                   }break;
+                                        ASTProcDefDecl *proc = (ASTProcDefDecl*)node;
+                                        printf("proc_decl");
+                                        PLOG("name: %.*s", proc->name.len, proc->name.mem);
+                                        if(proc->varArgs){
+                                            PLOG("var_args: true");
+                                        };
+                                        if(proc->inputCount){
+                                            PLOG("input:");
+                                            dumpASTBody((ASTBase**)proc->inputs, proc->inputCount, lexer, padding+1);
+                                        };
+                                        if(proc->outputCount){
+                                            PLOG("output:");
+                                            dumpASTBody((ASTBase**)proc->outputs, proc->outputCount, lexer, padding+1);
+                                        }
+                                    }break;
             case ASTType::PROC_DEF:{
                                        ASTProcDefDecl *proc = (ASTProcDefDecl*)node;
                                        printf("proc_def");

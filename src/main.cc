@@ -1,14 +1,19 @@
 #include "build.hh"
+#include "../include/genConfig.hh"
+#include <cstdio>
+
+GenConfig genConfig;
 
 s32 main(s32 argc, char **argv){
-    mem::init();
     if(argc < 2){
         printf("no entryfile provided\n");
         return EXIT_FAILURE;
     };
+    mem::init();
     char *inputPath = argv[1];
-    char *outputPath = "out.asm";
-    if(argc == 3) outputPath = argv[2];
+    //TODO: parse arguments 
+    genConfig.linkCLibs = 0;
+    genConfig.optimzation = 0;
 
     Word::init(Word::keywords, Word::keywordsData, ARRAY_LENGTH(Word::keywordsData));
     Word::init(Word::poundwords, Word::poundwordsData, ARRAY_LENGTH(Word::poundwordsData));
@@ -56,7 +61,7 @@ s32 main(s32 argc, char **argv){
         Lexer &lexer = dep::lexers[x];
         //printf("--------------FILE: %s--------------", lexer.fileName);
         //dbg::dumpLexerTokens(lexer);
-        dbg::dumpASTFile(dep::astFiles[x], lexer);
+        //dbg::dumpASTFile(dep::astFiles[x], lexer);
     }
 #endif
     memset(status, false, size);
@@ -71,6 +76,15 @@ s32 main(s32 argc, char **argv){
         };
     };
     lowerToLLVM("bin/out.ll", globals);
-    system("clang bin/out.ll -o bin/out");
+    char instrBuff[1025];
+    u32 curs = snprintf(instrBuff, 1025, "clang ");
+    for(u32 x=0; x<(u32)LinkConfigCLibs::COUNT; x++){
+        if(IS_BIT(genConfig.linkCLibs, x)){
+            curs += snprintf(instrBuff+curs, 1025-curs, "-l%s ", LinkConfigCLibsToStr[x]);
+        };
+    };
+    snprintf(instrBuff+curs, 1025-curs, "bin/out.ll -o bin/out");
+    printf("[+] %s\n", instrBuff);
+    system(instrBuff);
     return EXIT_SUCCESS;
 };

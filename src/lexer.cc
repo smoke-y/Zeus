@@ -32,6 +32,7 @@ namespace Word{
     };
     const WordData poundwordsData[] = {
         {"import", TokType::P_IMPORT},
+        {"link", TokType::P_LINK},
     };
     HashmapStr keywords;
     HashmapStr poundwords;

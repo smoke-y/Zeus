@@ -116,11 +116,13 @@ u32 lowerExpression(ASTBase *root, Type type, LLVMFile &file){
                                     for(u32 x=0; x<proc->argCount; x++){
                                         inputRegs[x] = lowerExpression(proc->args[x], proc->types[x].zType, file);
                                     };
+                                    u32 tempReg; 
                                     char *type;
                                     if(entity->outputCount == 0) type = "void";
                                     else{
+                                        tempReg = file.newReg();
                                         type = getLLVMType(entity->outputs[0]);
-                                        file.write("%%e%d = ", reg);
+                                        file.write("%%e%d = alloca %s\n%%t%d = ", reg, type, tempReg);
                                     };
                                     file.write("call %s @%.*s(", type, proc->name.len, proc->name.mem);
                                     if(proc->argCount == 0){
@@ -136,6 +138,7 @@ u32 lowerExpression(ASTBase *root, Type type, LLVMFile &file){
                                         file.write(",");
                                     };
                                     file.write(")\n");
+                                    if(entity->outputCount != 0) file.write("store %s %%t%d, ptr %%e%d\n", type, tempReg, reg);
                                     mem::free(inputRegs);
                                 }break;
     };
@@ -214,6 +217,15 @@ void lowerASTNode(ASTBase *node, LLVMFile &file){
                                        }
                                    };
                                    file.write("){\n");
+                                   for(u32 x=0; x<proc->inputCount; x++){
+                                       char *type = getLLVMType(proc->inputs[x]->zType);
+                                       ASTVariable **vars = (ASTVariable**)proc->inputs[x]->lhs;
+                                       for(u32 i=0; i<proc->inputs[x]->lhsCount; i++){
+                                           ASTVariable *var = vars[i];
+                                           u32 reg = file.newReg();
+                                           file.write("%%r%d = alloca %s\nstore %s %%%d, ptr %%r%d\n", reg, type, type, var->entity->id, reg);
+                                       }
+                                   };
                                    for(u32 x=0; x<proc->bodyCount; x++) lowerASTNode(proc->body[x], file);
                                    file.write("}\n");
                                    file.popRegion();

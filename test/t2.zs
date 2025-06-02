@@ -1,4 +1,5 @@
 #import "test/t3.zs"
+#import "lib/stdio.zs"
 
 foo :: struct{
     x: s32
@@ -10,7 +11,12 @@ goo :: struct{
 
 x: u32 = 2
 
-main :: proc(x: s32) -> u32{
+main :: proc(){
     y: u32 = 4
-    return y
+
+    //from test/t3.zs
+    f := gg(y)
+
+    //from lib/stdio.zs
+    printf("f: %d", f)
 }

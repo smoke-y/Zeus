@@ -281,11 +281,10 @@ ASTBase* _genASTExprTree(Lexer &lexer, ASTFile &file, u32 &xArg, u8 &bracketArg,
                                          ASTProcCall *pcall = (ASTProcCall*)file.newNode(sizeof(ASTProcCall), ASTType::PROC_CALL);
                                          pcall->tokenOff = x;
                                          pcall->name = makeStringFromTokOff(x, lexer);
-                                         x += 1;
+                                         x += 2;
                                          DynamicArray<ASTBase*> args;
                                          args.init();
-                                         while(tokTypes[x] != (TokType)')'){
-                                             x++;
+                                         while(x < bracketEnding){
                                              s32 end = getCommanEnding(tokTypes, x);
                                              if(end == -1) end = bracketEnding;
                                              ASTBase *arg = genASTExprTree(lexer, file, x, end);
@@ -294,9 +293,9 @@ ASTBase* _genASTExprTree(Lexer &lexer, ASTFile &file, u32 &xArg, u8 &bracketArg,
                                                  return nullptr;
                                              }
                                              args.push(arg);
-                                             x = end;
+                                             x = end + 1;
                                          };
-                                         x++;
+                                         x = bracketEnding + 1;
                                          u32 size = sizeof(ASTBase*)*args.count;
                                          ASTBase **argNodes = (ASTBase**)file.balloc(size);
                                          ASTTypeNode *types = (ASTTypeNode*)file.balloc(sizeof(ASTTypeNode) * args.count);
@@ -531,6 +530,7 @@ ASTAssDecl* parseAssDecl(Lexer &lexer, ASTFile &file, u32 &xArg, u32 ending = 0)
         x++;
         if(tokTypes[x] != (TokType)'='){
             assdecl->zType = genASTTypeNode(lexer, file, x);
+            if(assdecl->zType == nullptr) return nullptr;
             if(tokTypes[x] != (TokType)'='){
                 assdecl->rhs = nullptr;
                 return assdecl;
@@ -592,7 +592,6 @@ ASTFor* parseForLoop(Lexer &lexer, ASTFile &file, u32 &xArg){
     For->bodyCount = count;
     return For;
 };
-static int dfdf = 0;
 ASTIf *parseIfElse(Lexer &lexer, ASTFile &file, u32 &xArg){
     BRING_TOKENS_TO_SCOPE;
     u32 x = xArg;
@@ -907,13 +906,15 @@ bool parseBlock(Lexer &lexer, ASTFile &file, DynamicArray<ASTBase*> &table, u32 
                                    DynamicArray<ASTBase*> rets;
                                    rets.init();
                                    DEFER(rets.uninit());
-                                   while(tokTypes[x] != (TokType)'\n'){
-                                       s32 cend = getCommanEnding(tokTypes, x);
-                                       s32 end = (cend==-1)?nend:cend;
+                                   while(x < nend){
+                                       s32 end = getCommanEnding(tokTypes, x);
+                                       if(end == -1) end = nend;
                                        ASTBase *expr = genASTExprTree(lexer, file, x, end);
                                        if(expr == nullptr) return false;
                                        rets.push(expr);
+                                       x = end + 1;
                                    };
+                                   x = nend + 1;
                                    if(rets.count != 0){
                                        u32 count = sizeof(ASTBase*) * rets.count;
                                        ret->exprs = (ASTBase**)mem::alloc(count);
@@ -922,7 +923,6 @@ bool parseBlock(Lexer &lexer, ASTFile &file, DynamicArray<ASTBase*> &table, u32 
                                    ret->retCount = rets.count;
                                    ret->types = (ASTTypeNode*)mem::alloc(sizeof(ASTTypeNode) * rets.count);
                                    table.push(ret);
-                                   x++;
                                }break;
         case TokType::K_FOR:{
                                 ASTFor *For = parseForLoop(lexer, file, x);

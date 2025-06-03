@@ -509,7 +509,7 @@ bool checkProcDef(ASTProcDefDecl *proc, DynamicArray<Scope*> &scopes, Lexer &lex
             ASTReturn *ret = (ASTReturn*)proc->body[x];
             if(hasRet){
                 lexer.emitWarn(ret->tokenOff, "Proc has already returned. Dead code detected");
-                return false;
+                hasRet = false;
             };
             hasRet = true;
             if(proc->outputCount != ret->retCount){

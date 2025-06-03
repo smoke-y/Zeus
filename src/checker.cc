@@ -108,7 +108,7 @@ ProcEntity *getProcEntity(String name, DynamicArray<Scope*> &scopes){
 bool fillTypeInfo(Lexer &lexer, ASTTypeNode *node){
     BRING_TOKENS_TO_SCOPE;
     if(isType(tokTypes[node->tokenOff])){
-        node->zType = (Type)((u32)tokTypes[node->tokenOff] - (u32)TokType::K_TYPE_START + 1);  //+1 since Type::BOOL
+        node->zType = (Type)((u32)tokTypes[node->tokenOff] - (u32)TokType::K_TYPE_START);
         return true;
     };
     if(tokTypes[node->tokenOff] != TokType::IDENTIFIER){
@@ -161,7 +161,6 @@ u64 getSize(Lexer &lexer, Type type, u32 tokenOff){
         case Type::COMP_INTEGER:
         case Type::S64:
         case Type::U64:  return 64;
-        case Type::BOOL:
         case Type::S32:
         case Type::U32:  return 32;
         case Type::S16:
@@ -317,10 +316,9 @@ Type checkTree(Lexer &lexer, ASTBase *node, DynamicArray<Scope*> &scopes, u32 &p
     };
     switch(unOpType){
         case ASTType::U_NOT:{
-                                if(type != Type::BOOL){
+                                if(isInteger(type)){
                                     lexer.emitErr(tokOffs[unOpTokenOff+1].off, "Cannot '!' on this");
                                     return Type::INVALID;
-
                                 };
                             }break;
         case ASTType::U_NEG:{

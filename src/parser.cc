@@ -94,7 +94,7 @@ u32 getOperatorPriority(ASTType op){
 };
 s32 getBracketEnding(DynamicArray<TokType> &src, u32 off, char braOpen, char braClose){
     u32 level = 1;
-    while(src[off] != (TokType)('\n')){
+    while(src[off] != (TokType)('\n') || src[off] != TokType::END_OF_FILE){
         if(src[off] == (TokType)braOpen) level++;
         else if(src[off] == (TokType)braClose) level--;
         if(level == 0) return off;
@@ -202,6 +202,20 @@ ASTTypeNode* genASTTypeNode(Lexer &lexer, ASTFile &file, u32 &xArg){
     u32 x = xArg;
     DEFER(xArg = x);
     u8 pointerDepth = 0;
+    ASTTypeNode *type = (ASTTypeNode*)file.newNode(sizeof(ASTTypeNode), ASTType::TYPE);
+    if(tokTypes[x] == (TokType)'['){
+        type->arrayCount = -1;
+        x++;
+        if(tokTypes[x] == TokType::INTEGER){
+            type->arrayCount = string2int(makeStringFromTokOff(x, lexer));
+            x++;
+        };
+        if(tokTypes[x] != (TokType)']'){
+            lexer.emitErr(x, "Expected ']'");
+            return nullptr;
+        };
+        x++;
+    };
     while(tokTypes[x] == (TokType)'^'){
         pointerDepth++;
         x++;
@@ -210,7 +224,6 @@ ASTTypeNode* genASTTypeNode(Lexer &lexer, ASTFile &file, u32 &xArg){
         lexer.emitErr(x, "Expected a type");
         return nullptr;
     };
-    ASTTypeNode *type = (ASTTypeNode*)file.newNode(sizeof(ASTTypeNode), ASTType::TYPE);
     type->tokenOff = x++;
     type->pointerDepth = pointerDepth;
     return type;
@@ -395,36 +408,31 @@ ASTBase* genASTExprTree(Lexer &lexer, ASTFile &file, u32 &xArg, u32 end){
         case (TokType)'{':{
                               //initializer list
                               u32 x = xArg;
-                              s32 bracketEnding = getBracketEnding(tokTypes, x, '{', '}');
+                              ASTInitializerList *list = (ASTInitializerList*)file.newNode(sizeof(ASTInitializerList), ASTType::INITIALIZER_LIST);
+                              list->tokenOff = x;
+                              s32 bracketEnding = getBracketEnding(tokTypes, ++x, '{', '}');
                               if(bracketEnding == -1){
                                   lexer.emitErr(x, "Expected ending '}'");
                                   return nullptr;
                               }; 
-                              x++;
                               DynamicArray<ASTBase*> elements;
                               DEFER({
                                       xArg = x;
                                       elements.uninit();
                                       });
                               elements.init();
-                              while(true){
+                              while(x < bracketEnding){
                                   s32 end = getCommanEnding(tokTypes, x);
                                   if(end == -1) end = bracketEnding;
                                   ASTBase *node = genASTExprTree(lexer, file, x, end);
                                   if(!node) return nullptr;
                                   elements.push(node);
-                                  if(tokTypes[x] == (TokType)'}') break;
-                                  if(tokTypes[x] != (TokType)','){
-                                      lexer.emitErr(x, "Expected ','");
-                                      return nullptr;
-                                  };
-                                  x++;
+                                  x = end + 1;
                               };
-                              x++;
+                              x = bracketEnding + 1;
                               u32 size = sizeof(ASTBase*)*elements.count;
                               ASTBase **elementNodes = (ASTBase**)file.balloc(size);
                               memcpy(elementNodes, elements.mem, size);
-                              ASTInitializerList *list = (ASTInitializerList*)file.newNode(sizeof(ASTInitializerList), ASTType::INITIALIZER_LIST);
                               list->elements = elementNodes;
                               list->elementCount = elements.count;
                               return list;
@@ -545,6 +553,7 @@ ASTAssDecl* parseAssDecl(Lexer &lexer, ASTFile &file, u32 &xArg, u32 ending = 0)
     if(assdecl->zType == nullptr){
         assdecl->zType = (ASTTypeNode*)file.newNode(sizeof(ASTTypeNode), ASTType::TYPE);
         assdecl->zType->zType = Type::INVALID;
+        assdecl->zType->arrayCount = 0;
     };
     return assdecl;
 };

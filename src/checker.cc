@@ -198,6 +198,26 @@ Type checkTree(Lexer &lexer, ASTBase *node, DynamicArray<Scope*> &scopes, u32 &p
         case ASTType::BOOL:      type = Type::BOOL;break;
         case ASTType::INTEGER:   type = Type::COMP_INTEGER;break;
         case ASTType::DECIMAL:   type = Type::COMP_DECIMAL;break;
+        case ASTType::INITIALIZER_LIST:{
+                                           if(unOpType != ASTType::INVALID){
+                                               lexer.emitErr(unOpTokenOff, "Cannot use unary operators on initializer lists");
+                                               return Type::INVALID;
+                                           };
+                                           ASTInitializerList *il = (ASTInitializerList*)node;
+                                           type = checkTree(lexer, il->elements[0], scopes, pointerDepth);
+                                           for(u32 x=1; x<il->elementCount; x++){
+                                               u32 pd;
+                                               Type elemType = checkTree(lexer, il->elements[x], scopes, pd);
+                                               if(elemType != type){
+                                                   lexer.emitErr(il->tokenOff, "Elements %d's type(%s) does not match the type of the first element(%s)", x, typeToStr[(u32)elemType], typeToStr[(u32)type]);
+                                                   return Type::INVALID;
+                                               };
+                                               if(pd != pointerDepth){
+                                                   lexer.emitWarn(il->tokenOff, "Elements %d's pointer depth(%d) does not match the first element(%d)", x, pd, pointerDepth);
+                                               };
+                                           };
+                                           return type;
+                                       }break;
         case ASTType::PROC_CALL:{
                                     ASTProcCall *proc = (ASTProcCall*)node;
                                     ProcEntity *entity = getProcEntity(proc->name,scopes);
@@ -317,6 +337,18 @@ u64 checkDecl(ASTAssDecl *assdecl, DynamicArray<Scope*> &scopes, Lexer &lexer){
     u32 typePointerDepth;
     Type typeType = Type::INVALID;
     u32 tokenOff = assdecl->tokenOff;
+    if(assdecl->lhsCount > 1 && assdecl->rhs->type != ASTType::PROC_CALL){
+        lexer.emitErr(assdecl->tokenOff, "If LHS has many elements, then RHS should be a procedure call returning same number of elements");
+        return false;
+    };
+    if(assdecl->zType->zType == Type::INVALID && assdecl->rhs->type == ASTType::INITIALIZER_LIST){
+        lexer.emitErr(assdecl->tokenOff, "Type has to provided if using an intializer list");
+        return false;
+    };
+    if(assdecl->zType->arrayCount != 0 && assdecl->rhs->type != ASTType::INITIALIZER_LIST){
+        lexer.emitErr(assdecl->tokenOff, "If declaring an arrya, rhs has to be an intializer list");
+        return false;
+    };
     if(assdecl->zType->zType != Type::INVALID){
         if(!fillTypeInfo(lexer, assdecl->zType)) return 0;
         ASTTypeNode *type = assdecl->zType;
@@ -340,6 +372,14 @@ u64 checkDecl(ASTAssDecl *assdecl, DynamicArray<Scope*> &scopes, Lexer &lexer){
         }else{
             typeType = treeType;
             typePointerDepth = treePointerDepth;
+        };
+        if(assdecl->zType->arrayCount == -1){
+            ASTInitializerList *il = (ASTInitializerList*)assdecl->rhs;
+            assdecl->zType->arrayCount = il->elementCount;
+            if(assdecl->zType->zType != treeType){
+                lexer.emitErr(assdecl->tokenOff, "Initializer list's type(%s) does not match declared type(%s)", typeToStr[(u32)treeType], typeToStr[(u32)assdecl->zType->zType]);
+                return false;
+            };
         };
     };
     Scope *scope = scopes[scopes.count-1];
@@ -567,10 +607,6 @@ bool checkStructDef(ASTStruct *Struct, DynamicArray<Scope*> &scopes, Lexer &lexe
     return true;
 };
 bool checkAss(ASTAssDecl *assdecl, DynamicArray<Scope*> &scopes, Lexer &lexer){
-    if(assdecl->lhsCount > 1 && assdecl->rhs->type != ASTType::PROC_CALL){
-        lexer.emitErr(assdecl->tokenOff, "If LHS has many elements, then RHS should be a procedure call returning same number of elements");
-        return false;
-    };
     for(u32 x=0; x<assdecl->lhsCount; x++){
         ASTBase *node = assdecl->lhs[x];
         VariableEntity *entity = getVariableEntity(node, scopes);
@@ -609,12 +645,16 @@ bool checkAss(ASTAssDecl *assdecl, DynamicArray<Scope*> &scopes, Lexer &lexer){
         for(u32 x=0; x<entity->inputCount; x++){
             if(!checkASTNode(lexer, procCall->args[x], scopes)) return false;
         };
+        //TODO: CHECK TYPES!!!!!!!!
     }else{
         u32 treePointerDepth;
         Type treeType = checkTree(lexer, assdecl->rhs, scopes, treePointerDepth);
         if(treeType == Type::INVALID) return false;
+        if(assdecl->zType->zType == Type::INVALID){
+            assdecl->zType->zType = treeType;
+            assdecl->zType->pointerDepth = treePointerDepth;
+        };
     }
-    //TODO: Fill type information(array please) of assdecl
     return true;
 };
 u32 checkIf(ASTIf *If, DynamicArray<Scope*> &scopes, Lexer &lexer){

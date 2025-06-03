@@ -70,6 +70,7 @@ struct ASTTypeNode : ASTBase{
         Type zType;
         u32 tokenOff;
     };
+    s32 arrayCount;   //-1 during parsing stage, if length not given, else 0
     u8 pointerDepth;
 };
 struct ASTAssDecl : ASTBase{
@@ -163,6 +164,7 @@ struct ASTProcCall : ASTBase{
 struct ASTInitializerList : ASTBase{
     ASTBase **elements;
     u32 elementCount;
+    u32 tokenOff;
 };
 struct ASTArrayAt : ASTBase{
     ASTBase *at;

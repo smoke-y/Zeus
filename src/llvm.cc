@@ -14,23 +14,26 @@
 #define WRITE(file, buff, len)
 #endif
 
-char *TypeToString[] ={
+char* TypeToString[] = {
     "invalid",
+    "invalid_defer_cast",
+    "invalid_comp_string",
+    "invalid_comp_integer",
+    "invalid_comp_decimal",
+    "void",
+    "invalid_z_type_start",
+    "u8",
     "i8",
-    "double",
-    "i64",
-    "i64",
+    "char",
+    "i16",
+    "i16",
+    "i32",
+    "i32",
     "float",
-    "i32",
-    "i32",
-    "i16",
-    "i16",
-    "i8",
-    "i8",
-    "i8",
     "i64",
     "i64",
-    "invalid",
+    "double",
+    "invalid_z_type_end",
 };
 
 struct LLVMBucket{
@@ -85,9 +88,71 @@ char *getLLVMType(ASTTypeNode *node){
     if(node->zType == Type::COMP_STRING || node->pointerDepth) return "ptr";
     return TypeToString[(u32)node->zType];
 }
+s32 howCast(ASTTypeNode *n1, ASTTypeNode *n2){
+    /*
+     * n1 --casted_to-->n2
+     *  0: no llvm casting req
+     * -1: trunc
+     *  1: unsigned ext
+     *  2: signed ext
+     */
+    if(n1->pointerDepth > 0 && n2->pointerDepth > 0) return 0;
+    if(n1->zType == n2->zType) return 0;
+    Type t1 = n1->zType;
+    Type t2 = n2->zType;
+    s32 ret = -1;
+    if(t2 > t1){
+        Type temp = t2;
+        t2 = t1;
+        t1 = temp;
+        ret = 1;
+    };
+    Type acceptedT2 = Type::INVALID;
+    switch(t1){
+        case Type::U8:
+        case Type::S8:
+        case Type::CHAR:{
+                            switch(t2){
+                                case Type::U8:
+                                case Type::S8:
+                                case Type::CHAR: return 0;
+                            }
+                        }break;
+        case Type::S16: acceptedT2 = Type::U16;break;
+        case Type::S32: acceptedT2 = Type::U32;break;
+        case Type::S64: acceptedT2 = Type::U64;break;
+    };
+    if(acceptedT2 != Type::INVALID) return 0;
+    if(ret == -1) return -1;
+    //t1 and t2 are swapped
+    if(isSigned(t1)) return 2;
+    return 1;
+};
 u32 lowerExpression(ASTBase *root, LLVMFile &file, Type type = Type::INVALID){
     u32 reg = file.newReg();
     switch(root->type){
+        case ASTType::CAST:{
+                               ASTCast *cast = (ASTCast*)root;
+                               u32 childReg = lowerExpression(cast->child, file);
+                               char *srcType = getLLVMType(cast->srcType);
+                               char *tarType = getLLVMType(cast->targetType);
+                               s32 typeStat = howCast(cast->srcType, cast->targetType);
+                               char *func = nullptr;
+                               switch(typeStat){
+                                   case -1:func = "trunc";break;
+                                   case 1: func = "zext";break;
+                                   case 2: func = "sext";break;
+                               }
+                               u32 tempReg = file.newReg();
+                               file.write("%%t%d = load %s, ptr %%e%d\n", tempReg, srcType, childReg);
+                               if(func){
+                                   u32 castReg = file.newReg();
+                                   file.write("%%t%d = %s %s %%t%d to %s\n", castReg, func, srcType, tempReg, tarType);
+                                   tempReg = castReg;
+                               };
+                               file.write("%%e%d = alloca %s\n", reg, tarType);
+                               file.write("store %s %%t%d, ptr %%e%d\n", tarType, tempReg, reg);
+                           }break;
         case ASTType::VARIABLE:{
                                    ASTVariable *var = (ASTVariable*)root;
                                    VariableEntity *entity = var->entity;

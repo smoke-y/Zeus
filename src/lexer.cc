@@ -153,7 +153,7 @@ b32 Lexer::genTokens() {
                          u32 start = x;
                          while(isAlpha(src[x]) || src[x] == '_') x += 1;
                          if(start == x){
-                             emitErrAbs(start, "Expected an identifier");
+                             emitErrAbs(start, "Expected an identifier for pound word");
                              return false;
                          }
                          u32 type;

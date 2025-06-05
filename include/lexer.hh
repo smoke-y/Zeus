@@ -19,17 +19,17 @@ enum class TokType {
 
     K_START,       //keywords start
     K_TYPE_START,  //type start
-    K_F64,
-    K_S64,
-    K_U64,
-    K_F32,
-    K_S32,
-    K_U32,
-    K_S16,
-    K_U16,
-    K_CHAR,
-    K_S8,
     K_U8,
+    K_S8,
+    K_CHAR,
+    K_U16,
+    K_S16,
+    K_U32,
+    K_S32,
+    K_F32,
+    K_U64,
+    K_S64,
+    K_F64,
     K_TYPE_END,    //type end
     K_PROC_DEF,
     K_PROC_DECL,

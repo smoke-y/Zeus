@@ -29,6 +29,7 @@ enum class ASTType{
     STRING,
     ARRAY_AT,
     RETURN,
+    CAST,
 
     B_START,  //binary operators start
     B_ADD,
@@ -53,33 +54,32 @@ struct VariableEntity;
 struct ProcEntity;
 
 struct ASTBase{
+    u32 tokenOff;
     ASTType type;
 };
 struct ASTBinOp : ASTBase{
     ASTBase *lhs;
     ASTBase *rhs;
-    u32 tokenOff;
     bool hasBracket;
 };
 struct ASTUnOp : ASTBase{
     ASTBase *child;
-    u32 tokenOff;
 };
 struct ASTTypeNode : ASTBase{
-    union{
-        Type zType;
-        u32 tokenOff;
-    };
+    Type zType;
     s32 arrayCount;   //-1 during parsing stage, if length not given, else 0
     u8 pointerDepth;
+};
+struct ASTCast : ASTBase{
+    ASTBase *child;
+    ASTTypeNode *targetType;
+    ASTTypeNode *srcType;
 };
 struct ASTAssDecl : ASTBase{
     ASTBase **lhs;
     ASTBase *rhs;
     ASTTypeNode *zType;
     u32 lhsCount;
-    u32 tokenOff;
-    Type treeType;
 };
 struct ASTNum : ASTBase{
     union{
@@ -95,7 +95,6 @@ struct ASTIf : ASTBase{
     ASTBase **elseBody;
     u32 ifBodyCount;
     u32 elseBodyCount;
-    u32 exprTokenOff;
     Type zType;
 };
 struct ASTFor : ASTBase{
@@ -111,10 +110,7 @@ struct ASTFor : ASTBase{
     ASTBase *end;
     ASTBase **body;
     u32 bodyCount;
-    union{
-        u32 tokenOff;
-        Type zType;
-    };
+    Type zType;
 };
 struct ASTProcDefDecl : ASTBase{
     String name;
@@ -128,29 +124,21 @@ struct ASTProcDefDecl : ASTBase{
     bool varArgs;
     u32 outputCount;
     u32 bodyCount;
-    u32 tokenOff;
 };
 struct ASTStruct : ASTBase{
     String name;
     ASTBase **body;
     u32 bodyCount;
-    u32 tokenOff;
 };
 struct ASTVariable : ASTBase{
     String name;
-    union{
-        u32 tokenOff;
-        VariableEntity *entity;
-    };
+    VariableEntity *entity;
     u8 pAccessDepth;
 };
 struct ASTModifier : ASTBase{
     String name;
     ASTBase *child;
-    union{
-        u32 tokenOff;
-        VariableEntity *entity;
-    };
+    VariableEntity *entity;
     u8 pAccessDepth;
 };
 struct ASTProcCall : ASTBase{
@@ -159,12 +147,10 @@ struct ASTProcCall : ASTBase{
     ASTTypeNode *types;
     ProcEntity *entity;
     u32 argCount;
-    u32 tokenOff;
 };
 struct ASTInitializerList : ASTBase{
     ASTBase **elements;
     u32 elementCount;
-    u32 tokenOff;
 };
 struct ASTArrayAt : ASTBase{
     ASTBase *at;
@@ -177,7 +163,6 @@ struct ASTString : ASTBase{
 struct ASTReturn : ASTBase{
     ASTBase **exprs;
     ASTTypeNode *types;
-    u32 tokenOff;
     u32 retCount;
 };
 
@@ -190,7 +175,7 @@ struct ASTFile{
 
     void init(u32 astId);
     void uninit();
-    ASTBase* newNode(u64 size, ASTType type);
+    ASTBase* newNode(u64 size, ASTType type, u32 tokenOff);
     //bump-allocator for AST node members
     void* balloc(u64 size);
 };

@@ -203,6 +203,7 @@ Type checkTree(Lexer &lexer, ASTBase **nnode, DynamicArray<Scope*> &scopes, u32 
         return type;
     };
     Type treeType = _checkTree(lexer, nnode, scopes, pointerDepth);
+    if(treeType == Type::INVALID) return Type::INVALID;
     if(typeCheck == Type::INVALID) return treeType;
     ASTCast *cast = nullptr;
     if(treeType == Type::DEFER_CAST){

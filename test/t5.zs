@@ -1,4 +1,6 @@
+#import "lib/stdio.zs"
+
 main :: proc(){
-    x: u64 = 45
-    y: u32 = @ x
+    v : ^char = "lkjdsf"
+    printf("%s", v)
 }

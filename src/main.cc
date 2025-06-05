@@ -77,6 +77,7 @@ s32 main(s32 argc, char **argv){
             return EXIT_FAILURE;
         };
     };
+    if(report::warnOff != 0) report::flushReports();
     lowerToLLVM("bin/out.ll", globals);
     char instrBuff[1025];
     u32 curs = snprintf(instrBuff, 1025, "clang -Wno-override-module ");

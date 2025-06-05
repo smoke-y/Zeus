@@ -22,9 +22,9 @@ char* TypeToString[] = {
     "invalid_comp_decimal",
     "void",
     "invalid_z_type_start",
-    "u8",
     "i8",
-    "char",
+    "i8",
+    "i8",
     "i16",
     "i16",
     "i32",
@@ -328,14 +328,16 @@ void lowerASTNode(ASTBase *node, LLVMFile &file){
                                }break;
         case ASTType::DECLERATION:{
                                       ASTAssDecl *decl = (ASTAssDecl*)node;
-                                      Type type = (((ASTVariable*)(decl->lhs[0]))->entity->type);
-                                      u32 expReg = lowerExpression(decl->rhs, file, type);
-                                      char *typeStr = TypeToString[(u32)type];
                                       ASTVariable **vars = (ASTVariable**)decl->lhs;
                                       for(u32 x=0; x<decl->lhsCount; x++){
                                           ASTVariable *var = vars[x];
+                                          ASTTypeNode typeNode;
+                                          typeNode.zType = var->entity->type;
+                                          typeNode.pointerDepth = var->entity->pointerDepth;
+                                          u32 expReg = lowerExpression(decl->rhs, file, typeNode.zType);
                                           u32 id = var->entity->id;
                                           u32 tempReg = file.newReg();
+                                          char *typeStr = getLLVMType(&typeNode);
                                           file.write("%%r%d = alloca %s\n", id, typeStr);
                                           file.write("%%t%d = load %s, ptr %%e%d\n", tempReg, typeStr, expReg+x);
                                           file.write("store %s %%t%d, ptr %%r%d\n", typeStr, tempReg, id);
@@ -407,7 +409,22 @@ void lowerToLLVM(char *outputPath, DynamicArray<ASTBase*> &globals){
         if(check::stringToId.status[i]){
 DUMP_STRINGS:
             const String str = check::stringToId.keys[i];
-            temp = snprintf(buff+cursor, BUFF_SIZE-cursor, "@.str.%d = private unnamed_addr constant [%d x i8] c\"%.*s\\00\"\n@str.%d = dso_local global ptr @.str.%d\n", x, str.len+1, str.len, str.mem, x, x);
+            char tempBuff[1024];
+            u32 tmpCurs = 0;
+            u32 red = 0;
+            for(u32 x=0; x<str.len; x++){
+                if(str.mem[x] == '\\' && x+1 != str.len){
+                    if(str.mem[x+1] == 'n'){
+                        tempBuff[tmpCurs++] = '\\';
+                        tempBuff[tmpCurs++] = '0';
+                        tempBuff[tmpCurs++] = 'A';
+                        x++;
+                        red++;
+                    };
+                }else tempBuff[tmpCurs++] = str.mem[x];
+            };
+            temp = snprintf(buff+cursor, BUFF_SIZE-cursor, "@.str.%d = private unnamed_addr constant [%d x i8] c\"%.*s\\00\"\n@str.%d = dso_local global ptr @.str.%d\n",
+                    x, str.len - red + 1, str.len + red, tempBuff, x, x);
             if(temp+cursor > BUFF_SIZE){
                 WRITE(file, buff, cursor);
                 cursor = 0;

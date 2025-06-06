@@ -352,8 +352,7 @@ Type _checkTree(Lexer &lexer, ASTBase **nnode, DynamicArray<Scope*> &scopes, u32
                             bool matching = true;
                             if(isInteger(lhsType) ^ isInteger(rhsType)) matching = false;
                             else if(isDecimal(lhsType) ^ isDecimal(rhsType)) matching = false;
-                            else if(!(lhsType == Type::CHAR && rhsType == Type::CHAR)) matching = false;
-                            else matching = false;
+                            else if(lhsType == Type::CHAR ^ rhsType == Type::CHAR) matching = false;
                             if(matching == false){
                                 lexer.emitErr(binOp->tokenOff, "lhs group does not match with rhs group");
                                 return Type::INVALID;
@@ -374,6 +373,8 @@ Type _checkTree(Lexer &lexer, ASTBase **nnode, DynamicArray<Scope*> &scopes, u32
                         else if(rhsType > Type::Z_TYPE_END) type = rhsType;
                         else type = (lhsType <= rhsType)?lhsType:rhsType;
                         pointerDepth = (lhsUsingPointer < rhsUsingPointer)?rhsUsingPointer:lhsUsingPointer;
+                        binOp->zType.zType = type;
+                        binOp->zType.pointerDepth = pointerDepth;
                     };
                 }break;
     };

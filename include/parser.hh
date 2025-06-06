@@ -57,18 +57,21 @@ struct ASTBase{
     u32 tokenOff;
     ASTType type;
 };
-struct ASTBinOp : ASTBase{
-    ASTBase *lhs;
-    ASTBase *rhs;
-    bool hasBracket;
-};
-struct ASTUnOp : ASTBase{
-    ASTBase *child;
-};
 struct ASTTypeNode : ASTBase{
     Type zType;
     s32 arrayCount;   //-1 during parsing stage, if length not given, else 0
     u8 pointerDepth;
+};
+struct ASTBinOp : ASTBase{
+    ASTBase *lhs;
+    ASTBase *rhs;
+    union{
+        bool hasBracket;
+        ASTTypeNode zType;
+    };
+};
+struct ASTUnOp : ASTBase{
+    ASTBase *child;
 };
 struct ASTCast : ASTBase{
     ASTBase *child;

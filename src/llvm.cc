@@ -14,7 +14,7 @@
 #define WRITE(file, buff, len)
 #endif
 
-char* TypeToString[] = {
+char* TypeToStringTable[] = {
     "invalid",
     "invalid_defer_cast",
     "invalid_comp_string",
@@ -34,6 +34,13 @@ char* TypeToString[] = {
     "i64",
     "double",
     "invalid_z_type_end",
+};
+char* binOpToStringTable[] = {
+    "add",
+    "sub",
+    "mul",
+    "div",
+    "rem",
 };
 
 struct LLVMBucket{
@@ -86,8 +93,11 @@ struct LLVMFile{
 
 char *getLLVMType(ASTTypeNode *node){
     if(node->zType == Type::COMP_STRING || node->pointerDepth) return "ptr";
-    return TypeToString[(u32)node->zType];
+    return TypeToStringTable[(u32)node->zType];
 }
+char *getLLVMBinOp(ASTType type){
+    return binOpToStringTable[(u32)type - (u32)ASTType::B_START - 1];
+};
 s32 howCast(ASTTypeNode *n1, ASTTypeNode *n2){
     /*
      * n1 --casted_to-->n2
@@ -171,7 +181,7 @@ u32 lowerExpression(ASTBase *root, LLVMFile &file, Type type = Type::INVALID){
         case ASTType::INTEGER:{
                                   ASTNum *num = (ASTNum*)root;
                                   char *typeStr = "i64";
-                                  if(type != Type::INVALID) typeStr = TypeToString[(u32)type];
+                                  if(type != Type::INVALID) typeStr = TypeToStringTable[(u32)type];
                                   file.write("%%e%d = alloca %s\nstore %s %lld, ptr %%e%d\n", reg, typeStr, typeStr, num->integer, reg);
                               }break;
         case ASTType::PROC_CALL:{
@@ -220,6 +230,25 @@ u32 lowerExpression(ASTBase *root, LLVMFile &file, Type type = Type::INVALID){
                                     };
                                     if(entity->outputCount != 0) file.write("%%e%d = alloca %s\nstore %s %%t%d, ptr %%e%d\n", reg, type, type, tempReg, reg);
                                 }break;
+        default:{
+                    if(root->type > ASTType::B_START && root->type < ASTType::B_END){
+                        ASTBinOp *binOp = (ASTBinOp*)root;
+                        u32 lreg = lowerExpression(binOp->lhs, file);
+                        u32 rreg = lowerExpression(binOp->rhs, file);
+                        char *opStr = getLLVMBinOp(root->type);
+                        char sign = ' ';
+                        if(root->type == ASTType::B_DIV || root->type == ASTType::B_MOD) sign = isSigned(binOp->zType.zType)?'s':'u';
+                        u32 ltmp = file.newReg();
+                        u32 rtmp = file.newReg();
+                        u32 atmp = file.newReg();
+                        char *typeStr = getLLVMType(&binOp->zType);
+                        file.write("%%t%d = load %s, ptr %%e%d\n", ltmp, typeStr, lreg);
+                        file.write("%%t%d = load %s, ptr %%e%d\n", rtmp, typeStr, rreg);
+                        file.write("%%t%d = %c%s %s %%t%d, %%t%d\n", atmp, sign, opStr, typeStr, ltmp, rtmp);
+                        file.write("%%e%d = alloca %s\n", reg, typeStr);
+                        file.write("store %s %%t%d, ptr %%e%d\n", typeStr, atmp, reg);
+                    };
+                }break;
     };
     return reg;
 }
@@ -250,7 +279,7 @@ void lowerASTNode(ASTBase *node, LLVMFile &file){
                              }break;
         case ASTType::IF:{
                              ASTIf *If = (ASTIf*)node;
-                             char *typeStr = TypeToString[(u32)If->zType];
+                             char *typeStr = TypeToStringTable[(u32)If->zType];
                              u32 exprReg = lowerExpression(If->expr, file, If->zType);
                              u32 ifBodyLabel = file.label++;
                              u32 exitLabel = file.label++;
@@ -381,7 +410,7 @@ void lowerASTNode(ASTBase *node, LLVMFile &file){
                               if(For->end != nullptr){
                                   //c-for
                                   Type type = For->decl->zType->zType;
-                                  char *typeStr = TypeToString[(u32)type];
+                                  char *typeStr = TypeToStringTable[(u32)type];
                                   u32 id = ((ASTVariable*)(For->decl->lhs[0]))->entity->id;
                                   file.write("%%r%d = alloca %s\n", id, typeStr);
                                   u32 initReg = lowerExpression(For->decl->rhs, file, type);
@@ -485,7 +514,7 @@ GLOBAL_WRITE_LLVM_TO_BUFF:
             case ASTType::CHARACTER:
             case ASTType::INTEGER:{
                                       ASTNum *num = (ASTNum*)assdecl->rhs;
-                                      temp = snprintf(buff+cursor, BUFF_SIZE-cursor, "@g%d = dso_local global %s %lld\n", var->entity->id, TypeToString[(u32)var->entity->type], num->integer);
+                                      temp = snprintf(buff+cursor, BUFF_SIZE-cursor, "@g%d = dso_local global %s %lld\n", var->entity->id, TypeToStringTable[(u32)var->entity->type], num->integer);
                                   }break;
         };
         if(temp + cursor >= BUFF_SIZE){

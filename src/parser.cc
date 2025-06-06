@@ -596,6 +596,7 @@ ASTFor* parseForLoop(Lexer &lexer, ASTFile &file, u32 &xArg){
             ASTBase *node = genASTExprTree(lexer, file, x, bodyStart);
             if(!node) return nullptr;
             For->expr = node;
+            For->end = nullptr;
         }else{
             //for ever
             For->decl = nullptr;

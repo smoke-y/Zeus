@@ -98,7 +98,10 @@ struct ASTIf : ASTBase{
     Type zType;
 };
 struct ASTFor : ASTBase{
-    //when expr and initializer is nullptr, then we have an infinite loop
+    /*
+     * infinite: expr = nullptr
+     * c-while: end = nullptr
+     */
     union{
         //c-while
         ASTBase *expr;
@@ -110,7 +113,6 @@ struct ASTFor : ASTBase{
     ASTBase *end;
     ASTBase **body;
     u32 bodyCount;
-    Type zType;
 };
 struct ASTProcDefDecl : ASTBase{
     String name;

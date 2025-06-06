@@ -498,15 +498,15 @@ bool checkAss(ASTAssDecl *assdecl, DynamicArray<Scope*> &scopes, Lexer &lexer){
     for(u32 x=0; x<assdecl->lhsCount; x++){
         ASTBase *node = assdecl->lhs[x];
         VariableEntity *entity = getVariableEntity(node, scopes);
-        if(entity == nullptr){
-            if(node->type == ASTType::VARIABLE || node->type == ASTType::MODIFIER){
+        if(node->type == ASTType::VARIABLE){
+            if(entity == nullptr){
                 lexer.emitErr(assdecl->tokenOff, "Variable not defined in LHS(%d)", x);
                 return false;
             };
-            lexer.emitErr(assdecl->tokenOff, "Only variable or modifiers allowed in LHS");
-            return false;
+            ASTVariable *var = (ASTVariable*)node;
+            var->entity = entity;
+            entities.push(entity);
         };
-        entities.push(entity);
         if(node->type == ASTType::MODIFIER){
             ASTModifier *mod = (ASTModifier*)node;
             if(checkModifierChain(lexer, mod->child, entity) == Type::INVALID) return false;
@@ -524,7 +524,7 @@ bool checkAss(ASTAssDecl *assdecl, DynamicArray<Scope*> &scopes, Lexer &lexer){
         };
         for(u32 x=0; x<assdecl->lhsCount; x++){
             if(entities[x]->type != entity->outputs[x]->zType){
-                lexer.emitErr(assdecl->tokenOff, "Argument %d's type(%s) is not equal to rhs return type(%d)", x, typeToStr(entities[x]->type), typeToStr(entity->outputs[x]->zType));
+                lexer.emitErr(assdecl->tokenOff, "Argument %d's type(%s) is not equal to rhs return type(%d). Casting not allowed", x, typeToStr(entities[x]->type), typeToStr(entity->outputs[x]->zType));
                 return false;
             };
             if(entities[x]->pointerDepth != entity->outputs[x]->pointerDepth){
@@ -533,10 +533,8 @@ bool checkAss(ASTAssDecl *assdecl, DynamicArray<Scope*> &scopes, Lexer &lexer){
             };
         };
     }else{
-        if(assdecl->zType->zType == Type::INVALID){
-            assdecl->zType->zType = treeType;
-            assdecl->zType->pointerDepth = treePointerDepth;
-        };
+        assdecl->zType->zType = treeType;
+        assdecl->zType->pointerDepth = treePointerDepth;
     }
     return true;
 };
@@ -545,7 +543,7 @@ u32 checkFor(ASTFor *For, DynamicArray<Scope*> &scopes, Lexer &lexer){
     Scope *scope = scopes[scopes.count-1];
     Scope *body = check::newBlockScope(scope->varId);
     scopes.push(body);
-    if(For->decl != nullptr){
+    if(For->end != nullptr){
         //c-for
         if(For->decl->lhsCount != 1){
             lexer.emitErr(For->tokenOff, "C-style for loop has to have only 1 declared variable");
@@ -557,11 +555,6 @@ u32 checkFor(ASTFor *For, DynamicArray<Scope*> &scopes, Lexer &lexer){
         u32 forVarPd = For->decl->zType->pointerDepth;
         Type endType = checkTree(lexer, &For->end, scopes, endPointerDepth, forVarType, forVarPd);
         if(endType == Type::INVALID) return 0;
-        Type startType = For->decl->zType->zType;
-        if(startType != endType){
-            lexer.emitErr(For->tokenOff, "Initializer type not equal to end type");
-            return 0;
-        };
         if(For->step){
             u32 stepPointerDepth;
             Type stepType = checkTree(lexer, &For->step, scopes, stepPointerDepth, forVarType, forVarPd);
@@ -575,7 +568,6 @@ u32 checkFor(ASTFor *For, DynamicArray<Scope*> &scopes, Lexer &lexer){
                 return 0;
             };
         };
-        For->zType = startType;
     }else{
         //c-while
         if(!checkASTNode(lexer, For->expr, scopes)) return false;

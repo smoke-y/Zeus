@@ -349,10 +349,38 @@ void lowerASTNode(ASTBase *node, LLVMFile &file){
                                           };
                                       };
                                   }break;
+        case ASTType::ASSIGNMENT:{
+                                      ASTAssDecl *decl = (ASTAssDecl*)node;
+                                      ASTVariable **vars = (ASTVariable**)decl->lhs;
+                                      if(decl->lhsCount == 1){
+                                          ASTVariable *var = vars[0];
+                                          ASTTypeNode typeNode;
+                                          typeNode.zType = var->entity->type;
+                                          typeNode.pointerDepth = var->entity->pointerDepth;
+                                          u32 expReg = lowerExpression(decl->rhs, file, typeNode.zType);
+                                          u32 tempReg = file.newReg();
+                                          char *typeStr = getLLVMType(&typeNode);
+                                          file.write("%%t%d = load %s, ptr %%e%d\n", tempReg, typeStr, expReg);
+                                          file.write("store %s %%t%d, ptr %%r%d\n", typeStr, tempReg, var->entity->id);
+                                      }else{
+                                          u32 expReg = lowerExpression(decl->rhs, file);
+                                          for(u32 x=0; x<decl->lhsCount; x++){
+                                              ASTVariable *var = vars[x];
+                                              ASTTypeNode typeNode;
+                                              typeNode.zType = var->entity->type;
+                                              typeNode.pointerDepth = var->entity->pointerDepth;
+                                              char *typeStr = getLLVMType(&typeNode);
+                                              u32 tempReg = file.newReg();
+                                              file.write("%%t%d = load %s, ptr %%e%d\n", tempReg, typeStr, expReg+x);
+                                              file.write("store %s %%t%d, ptr %%r%d\n", typeStr, tempReg, var->entity->id);
+                                          };
+                                      };
+                                  }break;
         case ASTType::FOR:{
                               ASTFor *For = (ASTFor*)node;
-                              if(For->decl){
-                                  Type type = For->zType;
+                              if(For->end != nullptr){
+                                  //c-for
+                                  Type type = For->decl->zType->zType;
                                   char *typeStr = TypeToString[(u32)type];
                                   u32 id = ((ASTVariable*)(For->decl->lhs[0]))->entity->id;
                                   file.write("%%r%d = alloca %s\n", id, typeStr);
@@ -375,7 +403,7 @@ void lowerASTNode(ASTBase *node, LLVMFile &file){
                                   u32 cmpResReg = file.newReg();
                                   file.write("br label %%_%d\n_%d:\n%%t%d = load %s, ptr %%r%d\n", cmpLabel, cmpLabel, cmpLoadReg1, typeStr, id);
                                   file.write("%%t%d = load %s, ptr %%e%d\n", cmpLoadReg2, typeStr, endReg);
-                                  file.write("%%t%d = icmp eq %s %%t%d, %%t%d\n", cmpResReg, typeStr, cmpLoadReg1, cmpLoadReg2);
+                                  file.write("%%t%d = icmp slt %s %%t%d, %%t%d\n", cmpResReg, typeStr, cmpLoadReg1, cmpLoadReg2);
                                   file.write("br i1 %%t%d, label %%_%d, label %%_%d\n", cmpResReg, bdyLabel, exitLabel);
                                   file.write("_%d:\n", bdyLabel);
                                   lowerBody(For->body, For->bodyCount, file);
@@ -415,6 +443,8 @@ void lowerToLLVM(char *outputPath, DynamicArray<ASTBase*> &globals){
         if(check::stringToId.status[i]){
 DUMP_STRINGS:
             const String str = check::stringToId.keys[i];
+            u32 val;
+            check::stringToId.getValue(str, &val);
             char tempBuff[1024];
             u32 tmpCurs = 0;
             u32 red = 0;
@@ -430,7 +460,7 @@ DUMP_STRINGS:
                 }else tempBuff[tmpCurs++] = str.mem[x];
             };
             temp = snprintf(buff+cursor, BUFF_SIZE-cursor, "@.str.%d = private unnamed_addr constant [%d x i8] c\"%.*s\\00\"\n@str.%d = dso_local global ptr @.str.%d\n",
-                    x, str.len - red + 1, str.len + red, tempBuff, x, x);
+                    val, str.len - red + 1, str.len + red, tempBuff, val, val);
             if(temp+cursor > BUFF_SIZE){
                 WRITE(file, buff, cursor);
                 cursor = 0;

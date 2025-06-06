@@ -177,24 +177,22 @@ u32 lowerExpression(ASTBase *root, LLVMFile &file, Type type = Type::INVALID){
         case ASTType::PROC_CALL:{
                                     ASTProcCall *proc = (ASTProcCall*)root;
                                     ProcEntity *entity = proc->entity;
-                                    u32 *inputRegs;
-                                    if(proc->argCount > 0) inputRegs = (u32*)mem::alloc(sizeof(u32)*proc->argCount);
+                                    for(u32 x=1; x<entity->outputCount; x++) file.newReg();
+                                    u32 inputRegStart = reg + entity->outputCount;
+                                    for(u32 x=0; x<proc->argCount; x++) u32 tempReg = file.newReg();
                                     char *type;
                                     for(u32 x=0; x<proc->argCount; x++){
-                                        u32 tempReg = file.newReg();
                                         u32 reg = lowerExpression(proc->args[x], file, proc->types[x].zType);
                                         type = getLLVMType(&proc->types[x]);
-                                        file.write("%%t%d = load %s, ptr %%e%d\n", tempReg, type, reg);
-                                        inputRegs[x] = tempReg;
+                                        file.write("%%t%d = load %s, ptr %%e%d\n", inputRegStart+x, type, reg);
                                     };
                                     u32 tempReg = reg; 
                                     reg = file.newReg();
                                     if(entity->outputCount == 0) type = "void";
                                     else{
                                         for(u32 x=1; x<entity->outputCount; x++){
-                                            u32 oreg = file.newReg();
                                             type = getLLVMType(entity->outputs[x]);
-                                            file.write("%%e%d = alloca %s\n", oreg, type);
+                                            file.write("%%e%d = alloca %s\n", reg+x, type);
                                         };
                                         type = getLLVMType(entity->outputs[0]);
                                         file.write("%%t%d = ", tempReg);
@@ -205,17 +203,17 @@ u32 lowerExpression(ASTBase *root, LLVMFile &file, Type type = Type::INVALID){
                                         if(proc->argCount != 0){
                                             for(u32 x=0;;){
                                                 type = getLLVMType(&proc->types[x]);
-                                                file.write("%s %%t%d", type, inputRegs[x]);
+                                                file.write("%s %%t%d", type, inputRegStart + x);
                                                 if(++x == proc->argCount) break;
-                                                file.write(",");
+                                                file.write(", ");
                                             };
-                                            mem::free(inputRegs);
                                         };
                                         if(entity->outputCount > 1){
+                                            if(proc->argCount != 0) file.write(", ");
                                             for(u32 x=1;;){
                                                 file.write("ptr %%e%d", reg + x);
                                                 if(++x == entity->outputCount) break;
-                                                file.write(",");
+                                                file.write(", ");
                                             };
                                         };
                                         file.write(")\n");
@@ -290,37 +288,35 @@ void lowerASTNode(ASTBase *node, LLVMFile &file){
                                    if(proc->outputCount == 0) type = "void";
                                    else type = getLLVMType(proc->outputs[0]);
                                    file.write("define dso_local %s @%.*s(", type, proc->name.len, proc->name.mem);
-                                   if(proc->inputCount){
-                                       u32 x=0;
-                                       while(true){
-                                           char *type = getLLVMType(proc->inputs[x]->zType);
-                                           ASTVariable **vars = (ASTVariable**)proc->inputs[x]->lhs;
-                                           for(u32 i=0; i<proc->inputs[x]->lhsCount; i++){
-                                               ASTVariable *var = vars[i];
-                                               file.write("%s noundef %%%d", type, var->entity->id);
-                                           }
-                                           if(++x == proc->inputCount) break;
-                                           file.write(",");
-                                       }
-                                   };
-                                   if(proc->outputCount > 1){
-                                       u32 x=1;
-                                       while(true){
-                                           file.write("ptr noundef %%o%d", x);
-                                           if(++x == proc->outputCount) break;
-                                           file.write(",");
+                                   for(u32 x=0; x<proc->inputNodeCount; x++){
+                                       char *type = getLLVMType(proc->inputs[x]->zType);
+                                       ASTVariable **vars = (ASTVariable**)proc->inputs[x]->lhs;
+                                       u32 lhsCount = proc->inputs[x]->lhsCount;
+                                       for(u32 i=0; i<lhsCount; i++){
+                                           ASTVariable *var = vars[i];
+                                           file.write("%s noundef %%%d", type, var->entity->id);
+                                           if(i+1 == lhsCount) break;
+                                           file.write(", ");
                                        };
+                                       if(x+1 == proc->inputNodeCount) break;
+                                       file.write(", ");
+                                   };
+                                   if(proc->outputCount > 1 && proc->inputNodeCount) file.write(", ");
+                                   for(u32 x=1; x<proc->outputCount; x++){
+                                       file.write("ptr noundef %%o%d", x);
+                                       if(x+1 == proc->outputCount) break;
+                                       file.write(", ");
                                    };
                                    if(proc->varArgs) file.write(", ...");
                                    file.write("){\n");
-                                   for(u32 x=0; x<proc->inputCount; x++){
+                                   for(u32 x=0; x<proc->inputNodeCount; x++){
                                        char *type = getLLVMType(proc->inputs[x]->zType);
                                        ASTVariable **vars = (ASTVariable**)proc->inputs[x]->lhs;
                                        for(u32 i=0; i<proc->inputs[x]->lhsCount; i++){
                                            ASTVariable *var = vars[i];
                                            u32 reg = file.newReg();
                                            file.write("%%r%d = alloca %s\nstore %s %%%d, ptr %%r%d\n", reg, type, type, var->entity->id, reg);
-                                       }
+                                       };
                                    };
                                    for(u32 x=0; x<proc->bodyCount; x++) lowerASTNode(proc->body[x], file);
                                    file.write("}\n");
@@ -329,8 +325,8 @@ void lowerASTNode(ASTBase *node, LLVMFile &file){
         case ASTType::DECLERATION:{
                                       ASTAssDecl *decl = (ASTAssDecl*)node;
                                       ASTVariable **vars = (ASTVariable**)decl->lhs;
-                                      for(u32 x=0; x<decl->lhsCount; x++){
-                                          ASTVariable *var = vars[x];
+                                      if(decl->lhsCount == 1){
+                                          ASTVariable *var = vars[0];
                                           ASTTypeNode typeNode;
                                           typeNode.zType = var->entity->type;
                                           typeNode.pointerDepth = var->entity->pointerDepth;
@@ -339,9 +335,19 @@ void lowerASTNode(ASTBase *node, LLVMFile &file){
                                           u32 tempReg = file.newReg();
                                           char *typeStr = getLLVMType(&typeNode);
                                           file.write("%%r%d = alloca %s\n", id, typeStr);
-                                          file.write("%%t%d = load %s, ptr %%e%d\n", tempReg, typeStr, expReg+x);
+                                          file.write("%%t%d = load %s, ptr %%e%d\n", tempReg, typeStr, expReg);
                                           file.write("store %s %%t%d, ptr %%r%d\n", typeStr, tempReg, id);
-                                      }
+                                      }else{
+                                          u32 expReg = lowerExpression(decl->rhs, file);
+                                          for(u32 x=0; x<decl->lhsCount; x++){
+                                              ASTVariable *var = vars[x];
+                                              ASTTypeNode typeNode;
+                                              typeNode.zType = var->entity->type;
+                                              typeNode.pointerDepth = var->entity->pointerDepth;
+                                              char *typeStr = getLLVMType(&typeNode);
+                                              file.write("%%r%d = bitcast %s* %%e%d to %s*\n", var->entity->id, typeStr, expReg+x, typeStr); 
+                                          };
+                                      };
                                   }break;
         case ASTType::FOR:{
                               ASTFor *For = (ASTFor*)node;

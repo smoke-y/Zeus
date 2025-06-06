@@ -274,24 +274,23 @@ Type _checkTree(Lexer &lexer, ASTBase **nnode, DynamicArray<Scope*> &scopes, u32
                                             return Type::INVALID;
                                         };
                                     };
-                                    s32 entityInputOff = -1;
-                                    u32 totolCount;
-                                    bool newArg = true;
+                                    u32 curInputNode = 0;
+                                    u32 curInputLhsCount = entity->inputs[0]->lhsCount;
                                     for(u32 x=0; x<proc->argCount; x++){
-                                        Type inputType;
+                                        Type inputType = Type::INVALID;
                                         u32 inputPd;
-                                        if(newArg){
-                                            entityInputOff++;
-                                            totolCount = x + entity->inputs[entityInputOff]->lhsCount;
-                                            newArg = false;
-                                        };
-                                        if(x == totolCount-1) newArg = true;
-                                        if(entity->isDecl){
-                                            inputType = entity->typeInputs[entityInputOff]->zType;
-                                            inputPd = entity->typeInputs[entityInputOff]->pointerDepth;
-                                        }else{
-                                            inputType = entity->inputs[entityInputOff]->zType->zType;
-                                            inputPd = entity->inputs[entityInputOff]->zType->pointerDepth;
+                                        if(x < entity->inputCount){
+                                            if(entity->isDecl == false){
+                                                inputType = entity->inputs[curInputNode]->zType->zType;
+                                                inputPd = entity->inputs[curInputNode]->zType->pointerDepth;
+                                                if(x == curInputLhsCount-1 && curInputNode+1 != entity->inputNodeCount){
+                                                    curInputNode++;
+                                                    curInputLhsCount += entity->inputs[curInputNode]->lhsCount;
+                                                };
+                                            }else{
+                                                Type inputType = entity->typeInputs[x]->zType;
+                                                u32 inputPd = entity->typeInputs[x]->pointerDepth;
+                                            };
                                         };
                                         u32 pd;
                                         Type type = checkTree(lexer, &proc->args[x], scopes, pd, inputType, inputPd); 
@@ -299,24 +298,6 @@ Type _checkTree(Lexer &lexer, ASTBase **nnode, DynamicArray<Scope*> &scopes, u32
                                         ASTTypeNode *typeNode = &proc->types[x];
                                         typeNode->zType = type;
                                         typeNode->pointerDepth = pd;
-                                        if(x < entity->inputCount){
-                                            ASTTypeNode *typeNode;
-                                            if(entity->isDecl) typeNode = entity->typeInputs[x];
-                                            else typeNode = entity->inputs[x]->zType;
-                                            //only exception
-                                            if(typeNode->pointerDepth == 1 && typeNode->zType == Type::CHAR && type == Type::COMP_STRING) continue;
-                                            if(typeNode->zType != type){
-                                                lexer.emitErr(proc->tokenOff, "Argument %d type(%s) does not match procedure declaration's type(%s)", x, typeToStr(type), typeToStr(typeNode->zType));
-                                                return Type::INVALID;
-                                            };
-                                            if(typeNode->pointerDepth > 0 && pd == 0){
-                                                lexer.emitErr(proc->tokenOff, "Argument %d requires pointer depth %d, but argument is not a pointer", x, typeNode->pointerDepth);
-                                                return Type::INVALID;
-                                            };
-                                            if(typeNode->pointerDepth != pd){
-                                                lexer.emitWarn(proc->tokenOff, "Argument %d pointer depth is %d, but procedure was declared with %d", x, pd, typeNode->pointerDepth);
-                                            };
-                                        };
                                     };
                                     if(entity->outputCount == 0) type = Type::VOID;
                                     else type = entity->outputs[0]->zType;
@@ -412,14 +393,20 @@ Type _checkTree(Lexer &lexer, ASTBase **nnode, DynamicArray<Scope*> &scopes, u32
     };
     return type;
 };
-u64 checkDecl(ASTAssDecl *assdecl, DynamicArray<Scope*> &scopes, Lexer &lexer){
+u64 checkDecl(ASTAssDecl *assdecl, DynamicArray<Scope*> &scopes, Lexer &lexer, bool isInsideProcInput=false){
     BRING_TOKENS_TO_SCOPE;
     u32 typePointerDepth;
     Type typeType;
     u32 tokenOff = assdecl->tokenOff;
-    if(assdecl->lhsCount > 1 && assdecl->rhs->type != ASTType::PROC_CALL){
-        lexer.emitErr(assdecl->tokenOff, "If LHS has many elements, then RHS should be a procedure call returning same number of elements");
+    if(isInsideProcInput && assdecl->rhs != nullptr){
+        lexer.emitErr(assdecl->tokenOff, "Zeus does not support default argument");
         return false;
+    };
+    if(assdecl->lhsCount > 1 && isInsideProcInput == false){
+        if(assdecl->rhs->type != ASTType::PROC_CALL){
+            lexer.emitErr(assdecl->tokenOff, "If LHS has many elements, then RHS should be a procedure call returning same number of elements");
+            return false;
+        };
     };
     if(assdecl->zType->zType == Type::INVALID && assdecl->rhs->type == ASTType::INITIALIZER_LIST){
         lexer.emitErr(assdecl->tokenOff, "Type has to provided if using an intializer list");
@@ -435,6 +422,8 @@ u64 checkDecl(ASTAssDecl *assdecl, DynamicArray<Scope*> &scopes, Lexer &lexer){
         typeType = type->zType;
         typePointerDepth = type->pointerDepth;
     };
+    u64 size;
+    ProcEntity *pentity = nullptr;
     if(assdecl->rhs){
         u32 treePointerDepth;
         Type treeType = checkTree(lexer, &assdecl->rhs, scopes, treePointerDepth, assdecl->zType->zType, assdecl->zType->pointerDepth);
@@ -453,16 +442,13 @@ u64 checkDecl(ASTAssDecl *assdecl, DynamicArray<Scope*> &scopes, Lexer &lexer){
                 return 0;
             };
         };
-    };
-    Scope *scope = scopes[scopes.count-1];
-    u64 size;
-    ProcEntity *pentity = nullptr;
-    if(assdecl->rhs->type == ASTType::PROC_CALL){
-        ASTProcCall *proc = (ASTProcCall*)assdecl->rhs;
-        pentity = getProcEntity(proc->name, scopes);
-        if(assdecl->lhsCount != pentity->outputCount){
-            lexer.emitErr(assdecl->tokenOff, "Lhs(%d) is not equal to rhs return count(%d)", assdecl->lhsCount, pentity->outputCount);
-            return 0;
+        if(assdecl->rhs->type == ASTType::PROC_CALL){
+            ASTProcCall *proc = (ASTProcCall*)assdecl->rhs;
+            pentity = getProcEntity(proc->name, scopes);
+            if(assdecl->lhsCount != pentity->outputCount){
+                lexer.emitErr(assdecl->tokenOff, "Lhs(%d) is not equal to rhs return count(%d)", assdecl->lhsCount, pentity->outputCount);
+                return 0;
+            };
         };
     };
     if(typePointerDepth > 0) size = 64;
@@ -477,6 +463,7 @@ u64 checkDecl(ASTAssDecl *assdecl, DynamicArray<Scope*> &scopes, Lexer &lexer){
             lexer.emitErr(tokenOff, "Redefinition");
             return 0;
         };
+        Scope *scope = scopes[scopes.count-1];
         VariableEntity *entity = (VariableEntity*)mem::alloc(sizeof(VariableEntity));
         scope->vars.push(entity);
         ASTVariable *var = (ASTVariable*)lhsNode;
@@ -599,7 +586,7 @@ u32 checkFor(ASTFor *For, DynamicArray<Scope*> &scopes, Lexer &lexer){
     scopes.pop();
     return body->varId;
 };
-bool checkProcDecl(ASTProcDefDecl *proc, DynamicArray<Scope*> &scopes, Lexer &lexer){
+bool checkProc(ASTProcDefDecl *proc, DynamicArray<Scope*> &scopes, Lexer &lexer, bool isDecl){
     Scope *scope = scopes[scopes.count-1];
     if(scope->type != ScopeType::GLOBAL){
         lexer.emitErr(proc->tokenOff, "Procedure can only be defined in the global scope");
@@ -613,10 +600,11 @@ bool checkProcDecl(ASTProcDefDecl *proc, DynamicArray<Scope*> &scopes, Lexer &le
     ProcEntity *entity = (ProcEntity*)mem::alloc(sizeof(ProcEntity));
     scope->procs.push(entity);
     Scope *body = check::newBlockScope(0);
-    entity->isDecl = true;
+    entity->isDecl = isDecl;
     entity->varArgs = proc->varArgs;
     entity->inputs = proc->inputs;
     entity->inputCount = proc->inputCount;
+    entity->inputNodeCount = proc->inputNodeCount;
     entity->outputs = proc->outputs;
     entity->outputCount = proc->outputCount;
     scopes.push(body);
@@ -627,58 +615,24 @@ bool checkProcDecl(ASTProcDefDecl *proc, DynamicArray<Scope*> &scopes, Lexer &le
             procInputScope.uninit();
             scopes.pop();
             });
-    for(u32 x=0; x<proc->inputCount; x++){
-        if(!fillTypeInfo(lexer, proc->typeInputs[x])) return false;
+    if(isDecl == false){
+        for(u32 x=0; x<proc->inputNodeCount; x++){
+            if(proc->inputs[x]->type != ASTType::DECLERATION){
+                lexer.emitErr(proc->tokenOff, "Input %d is not a decleration", x);
+                return false;
+            };
+            ASTAssDecl *input = proc->inputs[x];
+            if(checkDecl(input, procInputScope, lexer, true) == 0) return false;
+        };
+    }else{
+        for(u32 x=0; x<proc->inputCount; x++){
+            if(!fillTypeInfo(lexer, proc->typeInputs[x])) return false;
+        };
     };
     for(u32 x=0; x<proc->outputCount; x++){
         if(!fillTypeInfo(lexer, proc->outputs[x])) return false;
     };
-    return true;
-}
-bool checkProcDef(ASTProcDefDecl *proc, DynamicArray<Scope*> &scopes, Lexer &lexer){
-    Scope *scope = scopes[scopes.count-1];
-    if(scope->type != ScopeType::GLOBAL){
-        lexer.emitErr(proc->tokenOff, "Procedure can only be defined in the global scope");
-        return false;
-    };
-    if(getProcEntity(proc->name, scopes)){
-        lexer.emitErr(proc->tokenOff, "Procedure with this name already exists");
-        return false;
-    };
-    scope->proc.insertValue(proc->name, scope->procs.count);
-    ProcEntity *entity = (ProcEntity*)mem::alloc(sizeof(ProcEntity));
-    scope->procs.push(entity);
-    Scope *body = check::newBlockScope(0);
-    entity->isDecl = false;
-    entity->varArgs = proc->varArgs;
-    entity->inputs = proc->inputs;
-    entity->inputCount = proc->inputCount;
-    entity->outputs = proc->outputs;
-    entity->outputCount = proc->outputCount;
-    scopes.push(body);
-    DynamicArray<Scope*> procInputScope;
-    procInputScope.init(1);
-    procInputScope.push(body);
-    DEFER({
-            procInputScope.uninit();
-            scopes.pop();
-            });
-    for(u32 x=0; x<proc->inputCount; x++){
-        if(proc->inputs[x]->type != ASTType::DECLERATION){
-            lexer.emitErr(proc->tokenOff, "One of the input is not a decleration");
-            return false;
-        };
-        ASTAssDecl *input = proc->inputs[x];
-        if(input->rhs){
-            lexer.emitErr(proc->tokenOff, "Zeus does not support default argument");
-            return false;
-        };
-        if(checkDecl(input, procInputScope, lexer) == 0) return false;
-    };
-
-    for(u32 x=0; x<proc->outputCount; x++){
-        if(!fillTypeInfo(lexer, proc->outputs[x])) return false;
-    };
+    if(isDecl) return true;
     for(u32 x=0; x<proc->bodyCount; x++){
         if(!checkASTNode(lexer, proc->body[x], scopes)) return false;
     };
@@ -701,6 +655,8 @@ bool checkProcDef(ASTProcDefDecl *proc, DynamicArray<Scope*> &scopes, Lexer &lex
                 Type defOutType = entity->outputs[i]->zType;
                 u32 defOutPd = entity->outputs[i]->pointerDepth;
                 Type type= checkTree(lexer, &ret->exprs[i], scopes, pointerDepth, defOutType, defOutPd);
+                ret->types[i].zType = type;
+                ret->types[i].pointerDepth = pointerDepth;
                 ASTTypeNode *typeNode = proc->outputs[i];
                 if(type != typeNode->zType){
                     lexer.emitErr(ret->tokenOff, "Proc declared return type is not matching return statement type");
@@ -790,10 +746,10 @@ bool checkASTNode(Lexer &lexer, ASTBase *node, DynamicArray<Scope*> &scopes){
                               if(newId == 0) return false;
                           }break;
         case ASTType::PROC_DECL:{
-                                    if(checkProcDecl((ASTProcDefDecl*)node, scopes, lexer) == false) return false;
+                                    if(checkProc((ASTProcDefDecl*)node, scopes, lexer, true) == false) return false;
                                 }break;
         case ASTType::PROC_DEF:{
-                                   if(checkProcDef((ASTProcDefDecl*)node, scopes, lexer) == false) return false;
+                                   if(checkProc((ASTProcDefDecl*)node, scopes, lexer, false) == false) return false;
                                }break;
         case ASTType::STRUCT:{
                                  if(checkStructDef((ASTStruct*)node, scopes, lexer) == false) return false;

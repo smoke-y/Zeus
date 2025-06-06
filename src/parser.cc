@@ -129,8 +129,8 @@ s32 getBodyStartOrReportErr(u32 off, Lexer &lexer){
     BRING_TOKENS_TO_SCOPE;
     u32 start = off;
     while(tokTypes[off] != (TokType)'\n' && tokTypes[off] != TokType::END_OF_FILE){
-        off++;
         if(tokTypes[off] == (TokType)'{') return off;
+        off++;
     };
     lexer.emitErr(start, "Expected '{' for the body");
     return -1;
@@ -660,7 +660,7 @@ ASTStruct *parseStruct(Lexer &lexer, ASTFile &file, u32 &xArg){
     Struct->bodyCount = count;
     return Struct;
 };
-ASTProcDefDecl *parseProcDecl(Lexer &lexer, ASTFile &file, u32 &xArg){
+ASTProcDefDecl *parseProc(Lexer &lexer, ASTFile &file, u32 &xArg, bool isDecl){
     BRING_TOKENS_TO_SCOPE;
     u32 x = xArg;
     DEFER(xArg = x);
@@ -668,15 +668,18 @@ ASTProcDefDecl *parseProcDecl(Lexer &lexer, ASTFile &file, u32 &xArg){
         lexer.emitErr(x, "Expected '('");
         return nullptr;
     };
-    ASTProcDefDecl *proc = (ASTProcDefDecl*)file.newNode(sizeof(ASTProcDefDecl), ASTType::PROC_DECL, x-4);
+    ASTProcDefDecl *proc = (ASTProcDefDecl*)file.newNode(sizeof(ASTProcDefDecl), isDecl?ASTType::PROC_DECL:ASTType::PROC_DEF, x-4);
     proc->varArgs = false;
     proc->name = makeStringFromTokOff(x-4, lexer);
     if(tokTypes[x+1] == (TokType)')'){
         x++;
         proc->inputCount = 0;
+        proc->inputNodeCount = 0;
     }else{
-        DynamicArray<ASTTypeNode*> inputs;
+        DynamicArray<ASTBase*> inputs;
         inputs.init();
+        DEFER(inputs.uninit());
+        u32 inputCount = 0;
         while(tokTypes[x] != (TokType)')'){
             x++;
             s32 end = getCommanEnding(tokTypes, x);
@@ -685,24 +688,29 @@ ASTProcDefDecl *parseProcDecl(Lexer &lexer, ASTFile &file, u32 &xArg){
                 proc->varArgs = true;
                 if(tokTypes[++x] != (TokType)')'){
                     lexer.emitErr(x, "Expected ')'. Cannot have arguments after var args");
-                    inputs.uninit();
                     return nullptr;
                 };
                 break;
             };
-            ASTTypeNode *input = genASTTypeNode(lexer, file, x);
-            if(!input){
-                inputs.uninit();
-                return nullptr;
+            ASTBase *inp;
+            if(isDecl){
+                inp = genASTTypeNode(lexer, file, x);
+                if(!inp) return nullptr;
+            }else{
+                ASTAssDecl *input = parseAssDecl(lexer, file, x, end);
+                if(!input) return nullptr;
+                inputCount += input->lhsCount;
+                inp = input;
             };
-            inputs.push(input);
+            inputs.push(inp);
         };
-        u32 size = sizeof(ASTTypeNode*)*inputs.count;
-        ASTTypeNode **inputNodes = (ASTTypeNode**)file.balloc(size);
+        u32 size = sizeof(ASTBase*)*inputs.count;
+        ASTBase **inputNodes = (ASTBase**)file.balloc(size);
         memcpy(inputNodes, inputs.mem, size);
-        proc->typeInputs = inputNodes;
-        proc->inputCount = inputs.count;
-        inputs.uninit();
+        //proc->inputs/typeInputs is union
+        proc->inputs = (ASTAssDecl**)inputNodes;
+        proc->inputCount = isDecl?inputs.count:inputCount;
+        proc->inputNodeCount = inputs.count;
     };
     if(tokTypes[++x] == (TokType)'-'){
         if(tokTypes[++x] != (TokType)'>'){
@@ -721,16 +729,7 @@ ASTProcDefDecl *parseProcDecl(Lexer &lexer, ASTFile &file, u32 &xArg){
             ASTTypeNode *output = genASTTypeNode(lexer, file, x);
             if(!output) return nullptr;
             outputs.push(output);
-            if(tokTypes[x] != (TokType)')' && tokTypes[x] != (TokType)','){
-                lexer.emitErr(x, "Expected ')' or ','");
-                return nullptr;
-            }else if(tokTypes[x] == (TokType)'{'){
-                if(bracket){
-                    lexer.emitErr(x, "Expected ending ')' bracket");
-                    return nullptr;
-                };
-                break;
-            }else if(tokTypes[x] == (TokType)')'){
+            if(tokTypes[x] == (TokType)')'){
                 if(!bracket){
                     lexer.emitErr(x, "No opening bracket to match this closing bracket");
                     return nullptr;
@@ -738,7 +737,15 @@ ASTProcDefDecl *parseProcDecl(Lexer &lexer, ASTFile &file, u32 &xArg){
                     x++;
                     break;
                 };
-            }
+            }else if(tokTypes[x] == (TokType)'{'){
+                if(bracket){
+                    lexer.emitErr(x, "Expected ')'");
+                    return nullptr;
+                }else break;
+            }else if(tokTypes[x] != (TokType)','){
+                lexer.emitErr(x, "Expected ','");
+                return nullptr;
+            };
             x++;
         };
         u32 size = sizeof(ASTBase*)*outputs.count;
@@ -747,97 +754,9 @@ ASTProcDefDecl *parseProcDecl(Lexer &lexer, ASTFile &file, u32 &xArg){
         proc->outputs = outputNodes;
         proc->outputCount = outputs.count;
     }else proc->outputCount = 0;
-    return proc;
-};
-ASTProcDefDecl *parseProcDef(Lexer &lexer, ASTFile &file, u32 &xArg){
-    BRING_TOKENS_TO_SCOPE;
-    u32 x = xArg;
-    DEFER(xArg = x);
-    if(tokTypes[++x] != (TokType)'('){
-        lexer.emitErr(x, "Expected '('");
-        return nullptr;
-    };
-    s32 braStart = getBodyStartOrReportErr(x, lexer);
-    if(braStart == -1) return nullptr;
-    ASTProcDefDecl *proc = (ASTProcDefDecl*)file.newNode(sizeof(ASTProcDefDecl), ASTType::PROC_DEF, x-4);
-    proc->varArgs = false;
-    proc->name = makeStringFromTokOff(x-4, lexer);
-    if(tokTypes[x+1] == (TokType)')'){
-        x++;
-        proc->inputCount = 0;
-    }else{
-        DynamicArray<ASTAssDecl*> inputs;
-        inputs.init();
-        while(tokTypes[x] != (TokType)')'){
-            x++;
-            s32 end = getCommanEnding(tokTypes, x);
-            if(end == -1) end = getBracketEnding(tokTypes, x, '(', ')');
-            if(tokTypes[x] == TokType::TDOT){
-                proc->varArgs = true;
-                if(tokTypes[++x] != (TokType)')'){
-                    lexer.emitErr(x, "Expected ')'. Cannot have arguments after var args");
-                    inputs.uninit();
-                    return nullptr;
-                };
-                break;
-            };
-            ASTAssDecl *input = parseAssDecl(lexer, file, x, end);
-            if(!input){
-                inputs.uninit();
-                return nullptr;
-            };
-            inputs.push(input);
-        };
-        u32 size = sizeof(ASTAssDecl*)*inputs.count;
-        ASTAssDecl **inputNodes = (ASTAssDecl**)file.balloc(size);
-        memcpy(inputNodes, inputs.mem, size);
-        proc->inputs = inputNodes;
-        proc->inputCount = inputs.count;
-        inputs.uninit();
-    };
-    if(tokTypes[++x] == (TokType)'-'){
-        if(tokTypes[++x] != (TokType)'>'){
-            lexer.emitErr(x, "Expected '>'");
-            return nullptr;
-        }
-        bool bracket = false;
-        if(tokTypes[++x] == (TokType)'('){
-            bracket = true;
-            x++;
-        };
-        DynamicArray<ASTTypeNode*> outputs;
-        outputs.init();
-        DEFER(outputs.uninit());
-        while(true){
-            ASTTypeNode *output = genASTTypeNode(lexer, file, x);
-            if(!output) return nullptr;
-            outputs.push(output);
-            if(tokTypes[x] != (TokType)')' && tokTypes[x] != (TokType)',' && tokTypes[x] != (TokType)'{'){
-                lexer.emitErr(x, "Expected ')' or ',' or '{'");
-                return nullptr;
-            }else if(tokTypes[x] == (TokType)'{'){
-                if(bracket){
-                    lexer.emitErr(x, "Expected ending ')' bracket");
-                    return nullptr;
-                };
-                break;
-            }else if(tokTypes[x] == (TokType)')'){
-                if(!bracket){
-                    lexer.emitErr(x, "No opening bracket to match this closing bracket");
-                    return nullptr;
-                }else{
-                    x++;
-                    break;
-                };
-            }
-            x++;
-        };
-        u32 size = sizeof(ASTBase*)*outputs.count;
-        ASTTypeNode **outputNodes = (ASTTypeNode**)file.balloc(size);
-        memcpy(outputNodes, outputs.mem, size);
-        proc->outputs = outputNodes;
-        proc->outputCount = outputs.count;
-    }else proc->outputCount = 0;
+    proc->bodyCount = 0;
+    if(isDecl) return proc;
+    if(getBodyStartOrReportErr(x, lexer) == -1) return nullptr;
     u32 count;
     ASTBase **body = parseBody(lexer, file, x, count, proc->outputCount == 0);
     deferStatements.count = 0;
@@ -921,6 +840,7 @@ bool parseBlock(Lexer &lexer, ASTFile &file, DynamicArray<ASTBase*> &table, u32 
                                        s32 end = getCommanEnding(tokTypes, x);
                                        if(end == -1) end = nend;
                                        ASTBase *expr = genASTExprTree(lexer, file, x, end);
+                                       ASTVariable *var = (ASTVariable*)expr;
                                        if(expr == nullptr) return false;
                                        rets.push(expr);
                                        x = end + 1;
@@ -956,12 +876,12 @@ bool parseBlock(Lexer &lexer, ASTFile &file, DynamicArray<ASTBase*> &table, u32 
                                                                         table.push(Struct);
                                                                     }break;
                                              case TokType::K_PROC_DECL:{
-                                                                           ASTProcDefDecl *proc = parseProcDecl(lexer, file, x);
+                                                                           ASTProcDefDecl *proc = parseProc(lexer, file, x, true);
                                                                            if(proc == nullptr) return false;
                                                                            table.push(proc);
                                                                        }break;
                                              case TokType::K_PROC_DEF:{
-                                                                          ASTProcDefDecl *proc = parseProcDef(lexer, file, x);
+                                                                          ASTProcDefDecl *proc = parseProc(lexer, file, x, false);
                                                                           if(proc == nullptr) return false;
                                                                           table.push(proc);
                                                                       }break;
@@ -1129,9 +1049,9 @@ namespace dbg{
                                        if(proc->varArgs == true){
                                            PLOG("var_args: true");
                                        };
-                                       if(proc->inputCount){
+                                       if(proc->inputNodeCount){
                                            PLOG("input:");
-                                           dumpASTBody((ASTBase**)proc->inputs, proc->inputCount, lexer, padding+1);
+                                           dumpASTBody((ASTBase**)proc->inputs, proc->inputNodeCount, lexer, padding+1);
                                        };
                                        if(proc->outputCount){
                                            PLOG("output:");
@@ -1184,10 +1104,6 @@ namespace dbg{
             case ASTType::DECLERATION:{
                                           ASTAssDecl *assdecl = (ASTAssDecl*)node;
                                           printf("decleration");
-                                          if(assdecl->zType){
-                                              PLOG("type:");
-                                              dumpASTNode(assdecl->zType, lexer, padding+1);
-                                          };
                                           PLOG("lhs: ");
                                           dumpASTBody(assdecl->lhs, assdecl->lhsCount, lexer, padding+1);
                                           if(assdecl->rhs){
@@ -1215,7 +1131,7 @@ namespace dbg{
             case ASTType::RETURN:{
                                      ASTReturn *ret = (ASTReturn*)node;
                                      printf("return");
-                                     for(u32 x=0; x<ret->retCount; x++) dumpASTNode(ret->exprs[0], lexer, padding+1);
+                                     for(u32 x=0; x<ret->retCount; x++) dumpASTNode(ret->exprs[x], lexer, padding+1);
                                  }break;
             case ASTType::B_LEQU: if(hasNotDumped){printf("lequ");hasNotDumped=false;};
             case ASTType::B_GEQU: if(hasNotDumped){printf("gequ");hasNotDumped=false;};

@@ -121,6 +121,7 @@ struct ASTProcDefDecl : ASTBase{
     ASTTypeNode **outputs;
     ASTBase     **body;
     u32 inputCount;
+    u32 inputNodeCount;
     bool varArgs;
     u32 outputCount;
     u32 bodyCount;

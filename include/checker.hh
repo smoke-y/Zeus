@@ -30,6 +30,7 @@ struct ProcEntity{
     ASTTypeNode **outputs;
     u32 outputCount;
     u32 inputCount;
+    u32 inputNodeCount;
     bool varArgs;
     bool isDecl;
 };

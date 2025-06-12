@@ -24,6 +24,7 @@ namespace check{
     DynamicArray<Scope*> structScopes;
     DynamicArray<Scope*> blockScopes;
     HashmapStr stringToId;
+    DynamicArray<ASTInitializerList*> initializerLists;
     static HashmapStr structToOff;
     static DynamicArray<StructEntity> structEntities;
     static ASTReturn defaultReturn;
@@ -34,6 +35,7 @@ namespace check{
         globalScopes = (Scope*)mem::alloc(size);
         memset(globalScopes, 0, size);
         structToOff.init();
+        initializerLists.init();
         structEntities.init();
         structScopes.init();
         blockScopes.init();
@@ -41,6 +43,7 @@ namespace check{
     };
     void uninit(){
         structToOff.uninit();
+        initializerLists.uninit();
         structEntities.uninit();
         for(u32 x=0; x<dep::lexers.count; x++) globalScopes[x].uninit();
         mem::free(globalScopes);
@@ -186,24 +189,29 @@ Type checkTree(Lexer &lexer, ASTBase **nnode, DynamicArray<Scope*> &scopes, u32 
     BRING_TOKENS_TO_SCOPE;
     pointerDepth = 0;
     ASTBase *node = *nnode;
+    Type treeType;
     if(node->type == ASTType::INITIALIZER_LIST){
         ASTInitializerList *il = (ASTInitializerList*)node;
-        Type type = checkTree(lexer, &il->elements[0], scopes, pointerDepth, typeCheck, typeCheckPd);
+        treeType = checkTree(lexer, &il->elements[0], scopes, pointerDepth, typeCheck, typeCheckPd);
         for(u32 x=1; x<il->elementCount; x++){
             u32 pd;
             Type elemType = checkTree(lexer, &il->elements[x], scopes, pd, typeCheck, typeCheckPd);
-            if(elemType != type){
-                lexer.emitErr(il->tokenOff, "Elements %d's type(%s) does not match the type of the first element(%s)", x, typeToStr(elemType), typeToStr(type));
+            if(isCompType(elemType) == false){
+                lexer.emitErr(il->tokenOff, "Elements %d has to be a compile time type", x);
                 return Type::INVALID;
             };
-            if(pd != pointerDepth){
-                lexer.emitWarn(il->tokenOff, "Elements %d's pointer depth(%d) does not match the first element(%d)", x, pd, pointerDepth);
+            if(elemType != treeType){
+                lexer.emitErr(il->tokenOff, "Elements %d's type(%s) does not match the type of the first element(%s)", x, typeToStr(elemType), typeToStr(treeType));
+                return Type::INVALID;
             };
         };
-        return type;
+        il->id = check::initializerLists.count;
+        il->zType = typeCheck;
+        check::initializerLists.push(il);
+    }else{
+        treeType = _checkTree(lexer, nnode, scopes, pointerDepth);
+        if(treeType == Type::INVALID) return Type::INVALID;
     };
-    Type treeType = _checkTree(lexer, nnode, scopes, pointerDepth);
-    if(treeType == Type::INVALID) return Type::INVALID;
     if(typeCheck == Type::INVALID) return treeType;
     ASTCast *cast = nullptr;
     if(treeType == Type::DEFER_CAST){
@@ -246,6 +254,37 @@ Type _checkTree(Lexer &lexer, ASTBase **nnode, DynamicArray<Scope*> &scopes, u32
         case ASTType::CHARACTER: type = Type::CHAR;break;
         case ASTType::INTEGER:   type = Type::COMP_INTEGER;break;
         case ASTType::DECIMAL:   type = Type::COMP_DECIMAL;break;
+        case ASTType::ARRAY_AT:{
+                                   ASTArrayAt *at = (ASTArrayAt*)node;
+                                   u32 atPd;
+                                   Type atType = checkTree(lexer, &at->at, scopes, atPd, Type::INVALID);
+                                   if(atType == Type::INVALID) return Type::INVALID;
+                                   if(isInteger(atType) == false){
+                                       lexer.emitErr(at->tokenOff, "At expression has to be of type integer");
+                                       return Type::INVALID;
+                                   };
+                                   if(atPd != 0){
+                                       lexer.emitErr(at->tokenOff, "At expression's pointer depth has to be 0");
+                                       return Type::INVALID;
+                                   };
+                                   at->atType = atType;
+                                   u32 parentPd;
+                                   Type parentType = checkTree(lexer, (ASTBase**)&at->parent, scopes, parentPd, Type::INVALID);
+                                   if(parentType == Type::INVALID) return Type::INVALID;
+                                   if(parentPd == 0){
+                                       lexer.emitErr(at->parent->tokenOff, "Parent has to be a pointer");
+                                       return Type::INVALID;
+                                   };
+                                   at->parentType.zType = parentType;
+                                   at->parentType.pointerDepth = parentPd;
+                                   if(at->child){
+                                       u32 childPd;
+                                       Type childType = checkTree(lexer, &at->child, scopes, childPd, Type::INVALID);
+                                       if(childType == Type::INVALID) return Type::INVALID;
+                                   };
+                                   type = parentType;
+                                   pointerDepth = parentPd - 1;
+                               }break;
         case ASTType::CAST:{
                                ASTCast *cast = (ASTCast*)node;
                                u32 srcPd;
@@ -312,14 +351,17 @@ Type _checkTree(Lexer &lexer, ASTBase **nnode, DynamicArray<Scope*> &scopes, u32
                              }break;
         case ASTType::VARIABLE:{
                                    VariableEntity *entity = getVariableEntity(node, scopes);
+                                   ASTVariable *var = (ASTVariable*)node;
                                    if(entity == nullptr){
-                                       ASTVariable *var = (ASTVariable*)node;
                                        lexer.emitErr(var->tokenOff, "Variable not defined");
                                        return Type::INVALID;
                                    };
-                                   ASTVariable *var = (ASTVariable*)node;
                                    var->entity = entity;
-                                   pointerDepth = (pointerDepth>entity->pointerDepth)?pointerDepth:entity->pointerDepth;
+                                   if(var->pAccessDepth > 0 && var->pAccessDepth - entity->pointerDepth > 0){
+                                       lexer.emitErr(var->tokenOff, "Pointer resolved %d times more than required", var->pAccessDepth - entity->pointerDepth);
+                                       return Type::INVALID;
+                                   };
+                                   pointerDepth = var->pAccessDepth?entity->pointerDepth - var->pAccessDepth:entity->pointerDepth;
                                    type = entity->type;
                                }break;
         case ASTType::MODIFIER:{
@@ -413,10 +455,6 @@ u64 checkDecl(ASTAssDecl *assdecl, DynamicArray<Scope*> &scopes, Lexer &lexer, b
         lexer.emitErr(assdecl->tokenOff, "Type has to provided if using an intializer list");
         return false;
     };
-    if(assdecl->zType->arrayCount != 0 && assdecl->rhs->type != ASTType::INITIALIZER_LIST){
-        lexer.emitErr(assdecl->tokenOff, "If declaring an array, rhs has to be an intializer list");
-        return false;
-    };
     if(assdecl->zType->zType != Type::INVALID){
         if(!fillTypeInfo(lexer, assdecl->zType)) return 0;
         ASTTypeNode *type = assdecl->zType;
@@ -435,14 +473,7 @@ u64 checkDecl(ASTAssDecl *assdecl, DynamicArray<Scope*> &scopes, Lexer &lexer, b
             typeType = treeType;
             typePointerDepth = treePointerDepth;
         };
-        if(assdecl->zType->arrayCount == -1){
-            ASTInitializerList *il = (ASTInitializerList*)assdecl->rhs;
-            assdecl->zType->arrayCount = il->elementCount;
-            if(assdecl->zType->zType != treeType){
-                lexer.emitErr(assdecl->tokenOff, "Initializer list's type(%s) does not match declared type(%s)", typeToStr(treeType), typeToStr(assdecl->zType->zType));
-                return 0;
-            };
-        };
+        if(assdecl->rhs->type == ASTType::INITIALIZER_LIST) typePointerDepth = 1;
         if(assdecl->rhs->type == ASTType::PROC_CALL){
             ASTProcCall *proc = (ASTProcCall*)assdecl->rhs;
             pentity = getProcEntity(proc->name, scopes);

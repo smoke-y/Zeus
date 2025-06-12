@@ -51,4 +51,5 @@ struct Scope{
 namespace check{
     extern Scope *globalScopes;
     extern HashmapStr stringToId;
+    extern DynamicArray<ASTInitializerList*> initializerLists;
 };

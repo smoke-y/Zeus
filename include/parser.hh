@@ -59,7 +59,6 @@ struct ASTBase{
 };
 struct ASTTypeNode : ASTBase{
     Type zType;
-    s32 arrayCount;   //-1 during parsing stage, if length not given, else 0
     u8 pointerDepth;
 };
 struct ASTBinOp : ASTBase{
@@ -141,12 +140,6 @@ struct ASTVariable : ASTBase{
     VariableEntity *entity;
     u8 pAccessDepth;
 };
-struct ASTModifier : ASTBase{
-    String name;
-    ASTBase *child;
-    VariableEntity *entity;
-    u8 pAccessDepth;
-};
 struct ASTProcCall : ASTBase{
     String name;
     ASTBase **args;
@@ -156,12 +149,22 @@ struct ASTProcCall : ASTBase{
 };
 struct ASTInitializerList : ASTBase{
     ASTBase **elements;
+    Type zType;
+    u32 id;
     u32 elementCount;
 };
+struct ASTModifier : ASTBase{
+    String name;
+    ASTBase *child;
+    VariableEntity *entity;
+    u8 pAccessDepth;
+};
 struct ASTArrayAt : ASTBase{
+    ASTTypeNode parentType;
     ASTBase *at;
     ASTVariable *parent;
     ASTBase *child;
+    Type atType;
 };
 struct ASTString : ASTBase{
     String str;

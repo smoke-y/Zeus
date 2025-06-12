@@ -155,7 +155,8 @@ ASTBase *genVariable(Lexer &lexer, ASTFile &file, u32 &xArg){
             pointerDepth += 1;
             x += 1;
         };
-        if(tokTypes[x] == (TokType)'.'){
+        if(tokTypes[x] == (TokType)'.' || tokTypes[x] == (TokType)'@'){
+            if(tokTypes[x] == (TokType)'@') pointerDepth++;
             ASTModifier *mod = (ASTModifier*)file.newNode(sizeof(ASTModifier), ASTType::MODIFIER, x);
             mod->name = makeStringFromTokOff(start, lexer);
             mod->pAccessDepth = pointerDepth;
@@ -182,8 +183,8 @@ ASTBase *genVariable(Lexer &lexer, ASTFile &file, u32 &xArg){
                 arrayAt->at = at;
                 arrayAt->parent = var;
                 arrayAt->child = nullptr;
-                x += 2;
                 if(childWriteLoc){*childWriteLoc = arrayAt;};
+                x++;
                 childWriteLoc = &arrayAt->child;
                 var = (ASTVariable*) arrayAt;
             }else if(childWriteLoc) *childWriteLoc = var;
@@ -202,14 +203,8 @@ ASTTypeNode* genASTTypeNode(Lexer &lexer, ASTFile &file, u32 &xArg){
     DEFER(xArg = x);
     u8 pointerDepth = 0;
     ASTTypeNode *type = (ASTTypeNode*)file.newNode(sizeof(ASTTypeNode), ASTType::TYPE, x);
-    type->arrayCount = 0;
     if(tokTypes[x] == (TokType)'['){
-        type->arrayCount = -1;
         x++;
-        if(tokTypes[x] == TokType::INTEGER){
-            type->arrayCount = string2int(makeStringFromTokOff(x, lexer));
-            x++;
-        };
         if(tokTypes[x] != (TokType)']'){
             lexer.emitErr(x, "Expected ']'");
             return nullptr;
@@ -267,7 +262,7 @@ ASTBase* _genASTExprTree(Lexer &lexer, ASTFile &file, u32 &xArg, u8 &bracketArg,
     //build operand
     ASTBase *lhs;
     switch(tokTypes[x]){
-        case (TokType)'@':{
+        case (TokType)'$':{
                               ASTCast *cast = (ASTCast*)file.newNode(sizeof(ASTCast), ASTType::CAST, x++);
                               cast->child = _genASTExprTree(lexer, file, x, bracket, end);
                               if(cast->child == nullptr) return nullptr;
@@ -560,7 +555,6 @@ ASTAssDecl* parseAssDecl(Lexer &lexer, ASTFile &file, u32 &xArg, u32 ending = 0)
     if(assdecl->zType == nullptr){
         assdecl->zType = (ASTTypeNode*)file.newNode(sizeof(ASTTypeNode), ASTType::TYPE, 0);
         assdecl->zType->zType = Type::INVALID;
-        assdecl->zType->arrayCount = 0;
     };
     return assdecl;
 };

@@ -3,6 +3,7 @@
 #include "../include/parser.hh"
 #include "../include/checker.hh"
 #include "../include/dependency.hh"
+#include <cstdio>
 #include <stdarg.h>
 
 #define BUCKET_BUFFER_SIZE 1023
@@ -18,8 +19,8 @@ char* TypeToStringTable[] = {
     "invalid",
     "invalid_defer_cast",
     "invalid_comp_string",
-    "invalid_comp_integer",
-    "invalid_comp_decimal",
+    "i64",
+    "double",
     "void",
     "invalid_z_type_start",
     "i8",
@@ -35,7 +36,17 @@ char* TypeToStringTable[] = {
     "double",
     "invalid_z_type_end",
 };
-char* binOpToStringTable[] = {
+u32 TypeToSizeTable[] = {
+    0, 0, 0,
+    8, 8,
+    0, 0,
+    1, 1, 1,
+    2, 2,
+    4, 4, 4,
+    8, 8, 8,
+    0,
+};
+char* BinOpToStringTable[] = {
     "add",
     "sub",
     "mul",
@@ -95,8 +106,12 @@ char *getLLVMType(ASTTypeNode *node){
     if(node->zType == Type::COMP_STRING || node->pointerDepth) return "ptr";
     return TypeToStringTable[(u32)node->zType];
 }
+u32 getLLVMSize(ASTTypeNode *node){
+    if(node->zType == Type::COMP_STRING || node->pointerDepth) return 8;
+    return TypeToSizeTable[(u32)node->zType];
+}
 char *getLLVMBinOp(ASTType type){
-    return binOpToStringTable[(u32)type - (u32)ASTType::B_START - 1];
+    return BinOpToStringTable[(u32)type - (u32)ASTType::B_START - 1];
 };
 s32 howCast(ASTTypeNode *n1, ASTTypeNode *n2){
     /*
@@ -141,6 +156,34 @@ s32 howCast(ASTTypeNode *n1, ASTTypeNode *n2){
 u32 lowerExpression(ASTBase *root, LLVMFile &file, Type type = Type::INVALID){
     u32 reg = file.newReg();
     switch(root->type){
+        case ASTType::ARRAY_AT:{
+                                   ASTArrayAt *at = (ASTArrayAt*)root;
+                                   u32 atReg = lowerExpression(at->at, file);
+                                   u32 parReg = lowerExpression(at->parent, file);
+                                   ASTTypeNode typeNode;
+                                   typeNode.zType = at->atType;
+                                   typeNode.pointerDepth = 0;
+                                   char *atType = getLLVMType(&typeNode);
+                                   at->parentType.pointerDepth--;
+                                   char *parType = getLLVMType(&at->parentType);
+                                   u32 tempAtReg = file.newReg();
+                                   u32 tempParReg = file.newReg();
+                                   file.write("%%t%d = load %s, ptr %%e%d\n", tempAtReg, atType, atReg);
+                                   file.write("%%t%d = load ptr, ptr %%e%d\n", tempParReg, parReg);
+                                   file.write("%%e%d = getelementptr inbounds %s, ptr %%t%d, %s %%t%d\n", reg, parType, tempParReg, atType, tempAtReg);
+                               }break;
+        case ASTType::INITIALIZER_LIST:{
+                                           ASTInitializerList *il = (ASTInitializerList*)root;
+                                           ASTTypeNode typeNode;
+                                           typeNode.zType = il->zType;
+                                           typeNode.pointerDepth = 0;
+                                           char *type = getLLVMType(&typeNode);
+                                           u32 tmpReg = file.newReg();
+                                           file.write("%%t%d = alloca [%d x %s]\n", tmpReg, il->elementCount, type);
+                                           file.write("call void @llvm.memcpy.p0.p0.i64(ptr %%t%d, ptr @.init_list.%d, i64 %d, i1 false)\n",
+                                                   tmpReg, il->id, il->elementCount * getLLVMSize(&typeNode));
+                                           file.write("%%e%d = alloca ptr\nstore ptr %%t%d, ptr %%e%d\n", reg, tmpReg, reg);
+                                       }break;
         case ASTType::CAST:{
                                ASTCast *cast = (ASTCast*)root;
                                u32 childReg = lowerExpression(cast->child, file);
@@ -379,32 +422,32 @@ void lowerASTNode(ASTBase *node, LLVMFile &file){
                                       };
                                   }break;
         case ASTType::ASSIGNMENT:{
-                                      ASTAssDecl *decl = (ASTAssDecl*)node;
-                                      ASTVariable **vars = (ASTVariable**)decl->lhs;
-                                      if(decl->lhsCount == 1){
-                                          ASTVariable *var = vars[0];
-                                          ASTTypeNode typeNode;
-                                          typeNode.zType = var->entity->type;
-                                          typeNode.pointerDepth = var->entity->pointerDepth;
-                                          u32 expReg = lowerExpression(decl->rhs, file, typeNode.zType);
-                                          u32 tempReg = file.newReg();
-                                          char *typeStr = getLLVMType(&typeNode);
-                                          file.write("%%t%d = load %s, ptr %%e%d\n", tempReg, typeStr, expReg);
-                                          file.write("store %s %%t%d, ptr %%r%d\n", typeStr, tempReg, var->entity->id);
-                                      }else{
-                                          u32 expReg = lowerExpression(decl->rhs, file);
-                                          for(u32 x=0; x<decl->lhsCount; x++){
-                                              ASTVariable *var = vars[x];
-                                              ASTTypeNode typeNode;
-                                              typeNode.zType = var->entity->type;
-                                              typeNode.pointerDepth = var->entity->pointerDepth;
-                                              char *typeStr = getLLVMType(&typeNode);
-                                              u32 tempReg = file.newReg();
-                                              file.write("%%t%d = load %s, ptr %%e%d\n", tempReg, typeStr, expReg+x);
-                                              file.write("store %s %%t%d, ptr %%r%d\n", typeStr, tempReg, var->entity->id);
-                                          };
-                                      };
-                                  }break;
+                                     ASTAssDecl *decl = (ASTAssDecl*)node;
+                                     ASTVariable **vars = (ASTVariable**)decl->lhs;
+                                     if(decl->lhsCount == 1){
+                                         ASTVariable *var = vars[0];
+                                         ASTTypeNode typeNode;
+                                         typeNode.zType = var->entity->type;
+                                         typeNode.pointerDepth = var->entity->pointerDepth;
+                                         u32 expReg = lowerExpression(decl->rhs, file, typeNode.zType);
+                                         u32 tempReg = file.newReg();
+                                         char *typeStr = getLLVMType(&typeNode);
+                                         file.write("%%t%d = load %s, ptr %%e%d\n", tempReg, typeStr, expReg);
+                                         file.write("store %s %%t%d, ptr %%r%d\n", typeStr, tempReg, var->entity->id);
+                                     }else{
+                                         u32 expReg = lowerExpression(decl->rhs, file);
+                                         for(u32 x=0; x<decl->lhsCount; x++){
+                                             ASTVariable *var = vars[x];
+                                             ASTTypeNode typeNode;
+                                             typeNode.zType = var->entity->type;
+                                             typeNode.pointerDepth = var->entity->pointerDepth;
+                                             char *typeStr = getLLVMType(&typeNode);
+                                             u32 tempReg = file.newReg();
+                                             file.write("%%t%d = load %s, ptr %%e%d\n", tempReg, typeStr, expReg+x);
+                                             file.write("store %s %%t%d, ptr %%r%d\n", typeStr, tempReg, var->entity->id);
+                                         };
+                                     };
+                                 }break;
         case ASTType::FOR:{
                               ASTFor *For = (ASTFor*)node;
                               if(For->end != nullptr){
@@ -470,7 +513,6 @@ void lowerToLLVM(char *outputPath, DynamicArray<ASTBase*> &globals){
     u32 temp;
     for(u32 x=0,i=0; x<check::stringToId.count;){
         if(check::stringToId.status[i]){
-DUMP_STRINGS:
             const String str = check::stringToId.keys[i];
             u32 val;
             check::stringToId.getValue(str, &val);
@@ -488,6 +530,7 @@ DUMP_STRINGS:
                     };
                 }else tempBuff[tmpCurs++] = str.mem[x];
             };
+DUMP_STRINGS:
             temp = snprintf(buff+cursor, BUFF_SIZE-cursor, "@.str.%d = private unnamed_addr constant [%d x i8] c\"%.*s\\00\"\n@str.%d = dso_local global ptr @.str.%d\n",
                     val, str.len - red + 1, str.len + red, tempBuff, val, val);
             if(temp+cursor > BUFF_SIZE){
@@ -523,6 +566,38 @@ GLOBAL_WRITE_LLVM_TO_BUFF:
             goto GLOBAL_WRITE_LLVM_TO_BUFF;
         };
         cursor += temp;
+    };
+    if(cursor) WRITE(file, buff, cursor);
+    cursor = 0;
+    for(u32 x=0; x<check::initializerLists.count; x++){
+        ASTInitializerList *il = check::initializerLists[x];
+        ASTTypeNode typeNode;
+        typeNode.zType = il->zType;
+        typeNode.pointerDepth = 0;
+        char *type = getLLVMType(&typeNode);
+        temp = snprintf(buff, BUFF_SIZE, "@.init_list.%d = private unnamed_addr constant [%d x %s] [", x, il->elementCount, type);
+        WRITE(file, buff, temp);
+        for(u32 x=0; x<il->elementCount; x++){
+            ASTNum *num = (ASTNum*)il->elements[x];
+INITIALIZER_LIST_WRITE_LLVM_TO_BUFF:
+            if(isInteger(typeNode.zType)){
+                temp = snprintf(buff+cursor, BUFF_SIZE-cursor, "%s %lld", type, num->integer);
+            }else{
+                temp = snprintf(buff+cursor, BUFF_SIZE-cursor, "%s %f", type, num->decimal);
+            }
+            cursor += temp;
+            if(x+1 != il->elementCount){
+                temp = snprintf(buff+cursor, BUFF_SIZE-cursor, ",");
+            }else{
+                temp = snprintf(buff+cursor, BUFF_SIZE-cursor, "]\n");
+            };
+            if(temp + cursor >= BUFF_SIZE){
+                WRITE(file, buff, cursor);
+                cursor = 0;
+                goto INITIALIZER_LIST_WRITE_LLVM_TO_BUFF;
+            };
+            cursor += temp;
+        };
     };
     if(cursor) WRITE(file, buff, cursor);
     for(u32 x=dep::astFiles.count; x > 0;){

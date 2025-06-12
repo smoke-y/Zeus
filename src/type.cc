@@ -90,7 +90,7 @@ bool canWeCast(Type t1, u32 pd1, Type t2, u32 pd2, u32 off, Lexer &lexer){
 bool implicitOk(Type t1, Type t2){
     /*
      * t1 --casted_to--> t2
-     * @type_clamp: type clamp down 2
+     * @type: type clamp down 2
      * handle comp_types
      */
     if(t2 == Type::COMP_DECIMAL || t2 == Type::COMP_INTEGER || t2 == Type::COMP_STRING){

@@ -106,6 +106,7 @@ bool implicitOk(Type t1, Type t2){
     switch(t1){
         case Type::COMP_DECIMAL:{
                                     switch(t2){
+                                        case Type::COMP_DECIMAL:
                                         case Type::F64:
                                         case Type::F32: return true;
                                     };
@@ -113,6 +114,7 @@ bool implicitOk(Type t1, Type t2){
                                 }break;
         case Type::COMP_INTEGER:{
                                     switch(t2){
+                                        case Type::COMP_INTEGER:
                                         case Type::S64:
                                         case Type::U64:
                                         case Type::S32:

@@ -216,7 +216,7 @@ Type checkTree(Lexer &lexer, ASTBase **nnode, DynamicArray<Scope*> &scopes, u32 
     ASTCast *cast = nullptr;
     if(treeType == Type::DEFER_CAST){
         cast = (ASTCast*)node;
-        if(canWeCast(cast->srcType->zType, cast->srcType->pointerDepth, typeCheck, typeCheckPd, node->tokenOff, lexer) == false) return Type::INVALID;
+        if(canWeCast(cast->srcType.zType, cast->srcType.pointerDepth, typeCheck, typeCheckPd, node->tokenOff, lexer) == false) return Type::INVALID;
     }
     if(cast == nullptr){
         if(canWeCast(treeType, pointerDepth, typeCheck, typeCheckPd, node->tokenOff, lexer) == false) return Type::INVALID;
@@ -224,9 +224,11 @@ Type checkTree(Lexer &lexer, ASTBase **nnode, DynamicArray<Scope*> &scopes, u32 
             if(treeType == typeCheck || isCompType(treeType)) return treeType;
             //alloc a cast node and poke it for an implicit casting
             cast = (ASTCast*)curASTFileForCastNodeAlloc->newNode(sizeof(ASTCast), ASTType::CAST, 0);
+            cast->targetType = (ASTTypeNode*)curASTFileForCastNodeAlloc->newNode(sizeof(ASTTypeNode), ASTType::TYPE, 0);
             *nnode = (ASTBase*)cast;
-            cast->srcType->zType = treeType;
-            cast->srcType->pointerDepth = pointerDepth;
+            cast->srcType.zType = treeType;
+            cast->srcType.pointerDepth = pointerDepth;
+            cast->child = node;
         }else{
             lexer.emitErr(node->tokenOff, "Explicit cast required");
             return Type::INVALID;
@@ -293,8 +295,8 @@ Type _checkTree(Lexer &lexer, ASTBase **nnode, DynamicArray<Scope*> &scopes, u32
                                ASTCast *cast = (ASTCast*)node;
                                treeType = checkTree(lexer, &cast->child, scopes, pointerDepth, Type::INVALID);
                                if(treeType == Type::INVALID) return Type::INVALID;
-                               cast->srcType->zType = treeType;
-                               cast->srcType->pointerDepth = pointerDepth;
+                               cast->srcType.zType = treeType;
+                               cast->srcType.pointerDepth = pointerDepth;
                                type = Type::DEFER_CAST;
                            }break;
         case ASTType::PROC_CALL:{
@@ -507,11 +509,10 @@ u64 checkDecl(ASTAssDecl *assdecl, DynamicArray<Scope*> &scopes, Lexer &lexer, b
         };
         Scope *scope = scopes[scopes.count-1];
         VariableEntity *entity = (VariableEntity*)mem::alloc(sizeof(VariableEntity));
-        scope->vars.push(entity);
         ASTVariable *var = (ASTVariable*)lhsNode;
+        scope->var.insertValue(var->name, scope->vars.count);
+        scope->vars.push(entity);
         var->entity = entity;
-        u32 id = scope->varId++;
-        scope->var.insertValue(var->name, id);
         if(pentity == nullptr){
             entity->pointerDepth = typePointerDepth;
             entity->type = convertFromComptype(typeType);
@@ -519,9 +520,8 @@ u64 checkDecl(ASTAssDecl *assdecl, DynamicArray<Scope*> &scopes, Lexer &lexer, b
             entity->pointerDepth = pentity->outputs[x]->pointerDepth;
             entity->type = pentity->outputs[x]->zType;
         };
-        entity->id = id;
+        entity->id = scope->varId++;
         entity->size = size;
-        //TODO: Fill type information(array please) of assdecl
     };
     return size;
 };

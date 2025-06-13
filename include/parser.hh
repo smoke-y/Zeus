@@ -76,7 +76,7 @@ struct ASTUnOp : ASTBase{
 struct ASTCast : ASTBase{
     ASTBase *child;
     ASTTypeNode *targetType;
-    ASTTypeNode *srcType;
+    ASTTypeNode srcType;
 };
 struct ASTAssDecl : ASTBase{
     ASTBase **lhs;

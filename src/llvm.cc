@@ -202,9 +202,9 @@ u32 lowerExpression(ASTBase *root, LLVMFile &file, Type type){
         case ASTType::CAST:{
                                ASTCast *cast = (ASTCast*)root;
                                u32 childReg = lowerExpression(cast->child, file);
-                               char *srcType = getLLVMType(cast->srcType);
+                               char *srcType = getLLVMType(&cast->srcType);
                                char *tarType = getLLVMType(cast->targetType);
-                               s32 typeStat = howCast(cast->srcType, cast->targetType);
+                               s32 typeStat = howCast(&cast->srcType, cast->targetType);
                                char *func = nullptr;
                                switch(typeStat){
                                    case -1:func = "trunc";break;

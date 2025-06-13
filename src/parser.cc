@@ -267,9 +267,8 @@ ASTBase* _genASTExprTree(Lexer &lexer, ASTFile &file, u32 &xArg, u8 &bracketArg,
                               cast->child = _genASTExprTree(lexer, file, x, bracket, end);
                               if(cast->child == nullptr) return nullptr;
                               cast->targetType = (ASTTypeNode*)file.newNode(sizeof(ASTTypeNode), ASTType::TYPE, x);
-                              cast->srcType = (ASTTypeNode*)file.newNode(sizeof(ASTTypeNode), ASTType::TYPE, x);
                               cast->targetType->zType = Type::DEFER_CAST;
-                              cast->srcType->zType = Type::INVALID;
+                              cast->srcType.zType = Type::INVALID;
                               lhs = (ASTBase*)cast;
                           }break;
         case TokType::INTEGER:{

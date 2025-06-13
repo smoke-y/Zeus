@@ -1,8 +1,10 @@
 #import "lib/stdio.zs"
 
 main :: proc(){
-    x: []u32 = {0,1,2,3,4}
-    y :=  x[1]
-    z :=  x[0]
-    printf("%d  %d", z,y)
+    x := 34
+    y := &x
+    z := &y
+    a := &z
+    v := a^^^
+    printf("%p -> %d", a, v)
 }

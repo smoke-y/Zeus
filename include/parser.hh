@@ -70,6 +70,7 @@ struct ASTBinOp : ASTBase{
     };
 };
 struct ASTUnOp : ASTBase{
+    ASTTypeNode childType;
     ASTBase *child;
 };
 struct ASTCast : ASTBase{

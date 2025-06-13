@@ -153,9 +153,24 @@ s32 howCast(ASTTypeNode *n1, ASTTypeNode *n2){
     if(isSigned(t1)) return 2;
     return 1;
 };
-u32 lowerExpression(ASTBase *root, LLVMFile &file, Type type = Type::INVALID){
+u32 lowerExpression(ASTBase *root, LLVMFile &file, Type type = Type::INVALID);
+void lowerUnop(u32 reg, ASTUnOp *unop, LLVMFile &file){
+    switch(unop->type){
+        case ASTType::U_MEM:{
+                                u32 childReg = lowerExpression(unop->child, file);
+                                unop->childType.pointerDepth -= 1;
+                                char *type = getLLVMType(&unop->childType);
+                                file.write("%%e%d = alloca ptr\n", reg);
+                                file.write("store ptr %%e%d, ptr %%e%d\n", childReg, reg);
+                            }break;
+    };
+};
+u32 lowerExpression(ASTBase *root, LLVMFile &file, Type type){
     u32 reg = file.newReg();
     switch(root->type){
+        case ASTType::U_MEM:{
+                                lowerUnop(reg, (ASTUnOp*)root, file);
+                            }break;
         case ASTType::ARRAY_AT:{
                                    ASTArrayAt *at = (ASTArrayAt*)root;
                                    u32 atReg = lowerExpression(at->at, file);
@@ -213,7 +228,21 @@ u32 lowerExpression(ASTBase *root, LLVMFile &file, Type type = Type::INVALID){
                                    typeNode.zType = entity->type;
                                    typeNode.pointerDepth = var->pAccessDepth;
                                    char *type = getLLVMType(&typeNode);
-                                   file.write("%%e%d = bitcast %s* %%r%d to %s*\n", reg, type, entity->id, type);
+                                   if(var->pAccessDepth == 0) file.write("%%e%d = bitcast %s* %%r%d to %s*\n", reg, type, entity->id, type);
+                                   else{
+                                       if(var->pAccessDepth == 1){
+                                           file.write("%%e%d = load ptr, ptr %%r%d\n", reg, entity->id);
+                                       }else{
+                                           u32 tmpReg = file.newReg();
+                                           file.write("%%t%d = load ptr, ptr %%r%d\n", tmpReg, entity->id);
+                                           for(u32 x=0; x<var->pAccessDepth-2; x++){
+                                               u32 newTmpReg = file.newReg();
+                                               file.write("%%t%d = load ptr, ptr %%t%d\n", newTmpReg, tmpReg);
+                                               tmpReg = newTmpReg;
+                                           };
+                                           file.write("%%e%d = load ptr, ptr %%t%d\n", reg, tmpReg);
+                                       };
+                                   };
                                }break;
         case ASTType::STRING:{
                                  ASTString *str = (ASTString*)root;

@@ -242,14 +242,18 @@ Type _checkTree(Lexer &lexer, ASTBase **nnode, DynamicArray<Scope*> &scopes, u32
     ASTType unOpType = ASTType::INVALID;
     u32 unOpTokenOff;
     ASTBase *node = *nnode;
+    ASTUnOp *rootUnop = nullptr;
+    if(node->type > ASTType::U_START && node->type < ASTType::U_END) rootUnop = (ASTUnOp*)node;
     while(node->type > ASTType::U_START && node->type < ASTType::U_END){
         //unary ops return the type of the child
         ASTUnOp *unOp = (ASTUnOp*)node;
+        if(unOp->type == ASTType::U_MEM) pointerDepth++;
         unOpType = unOp->type;
         unOpTokenOff = unOp->tokenOff;
         node = unOp->child;
     };
     Type type = Type::INVALID;
+    Type treeType;  //used for ASTType::CAST
     switch(node->type){
         case ASTType::CHARACTER: type = Type::CHAR;break;
         case ASTType::INTEGER:   type = Type::COMP_INTEGER;break;
@@ -287,12 +291,11 @@ Type _checkTree(Lexer &lexer, ASTBase **nnode, DynamicArray<Scope*> &scopes, u32
                                }break;
         case ASTType::CAST:{
                                ASTCast *cast = (ASTCast*)node;
-                               u32 srcPd;
-                               Type srcType = checkTree(lexer, &cast->child, scopes, srcPd, Type::INVALID);
-                               if(srcType == Type::INVALID) return Type::INVALID;
-                               cast->srcType->zType = srcType;
-                               cast->srcType->pointerDepth = srcPd;
-                               return Type::DEFER_CAST;
+                               treeType = checkTree(lexer, &cast->child, scopes, pointerDepth, Type::INVALID);
+                               if(treeType == Type::INVALID) return Type::INVALID;
+                               cast->srcType->zType = treeType;
+                               cast->srcType->pointerDepth = pointerDepth;
+                               type = Type::DEFER_CAST;
                            }break;
         case ASTType::PROC_CALL:{
                                     ASTProcCall *proc = (ASTProcCall*)node;
@@ -361,7 +364,7 @@ Type _checkTree(Lexer &lexer, ASTBase **nnode, DynamicArray<Scope*> &scopes, u32
                                        lexer.emitErr(var->tokenOff, "Pointer resolved %d times more than required", var->pAccessDepth - entity->pointerDepth);
                                        return Type::INVALID;
                                    };
-                                   pointerDepth = var->pAccessDepth?entity->pointerDepth - var->pAccessDepth:entity->pointerDepth;
+                                   pointerDepth += var->pAccessDepth?entity->pointerDepth - var->pAccessDepth:entity->pointerDepth;
                                    type = entity->type;
                                }break;
         case ASTType::MODIFIER:{
@@ -434,6 +437,13 @@ Type _checkTree(Lexer &lexer, ASTBase **nnode, DynamicArray<Scope*> &scopes, u32
                                 };
                             }break;
     };
+    if(type != Type::DEFER_CAST) treeType = type;
+    while(rootUnop){
+        rootUnop->childType.zType = treeType;
+        rootUnop->childType.pointerDepth = pointerDepth;
+        if(rootUnop->child->type > ASTType::U_START && rootUnop->child->type < ASTType::U_END) rootUnop = (ASTUnOp*)rootUnop->child;
+        else rootUnop = nullptr;
+    };
     return type;
 };
 u64 checkDecl(ASTAssDecl *assdecl, DynamicArray<Scope*> &scopes, Lexer &lexer, bool isInsideProcInput=false){
@@ -504,7 +514,7 @@ u64 checkDecl(ASTAssDecl *assdecl, DynamicArray<Scope*> &scopes, Lexer &lexer, b
         scope->var.insertValue(var->name, id);
         if(pentity == nullptr){
             entity->pointerDepth = typePointerDepth;
-            entity->type = typeType;
+            entity->type = convertFromComptype(typeType);
         }else{
             entity->pointerDepth = pentity->outputs[x]->pointerDepth;
             entity->type = pentity->outputs[x]->zType;

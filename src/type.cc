@@ -22,6 +22,11 @@ char* typeToStrTable[] = {
     "z_type_end",
 };
 
+Type convertFromComptype(Type type){
+    if(type == Type::COMP_INTEGER) return Type::S64;
+    if(type == Type::COMP_DECIMAL) return Type::F64;
+    return type;
+};
 inline char *typeToStr(Type type){return typeToStrTable[(u32)type];};
 bool isNumber(Type type) {return (type >= Type::U8 && type <= Type::F64) || type == Type::COMP_INTEGER || type == Type::COMP_DECIMAL;}
 bool isSigned(Type type){

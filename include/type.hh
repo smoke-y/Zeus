@@ -25,6 +25,7 @@ enum class Type{
     Z_TYPE_END,
 };
 
+Type convertFromComptype(Type type);
 char *typeToStr(Type type);
 bool isSigned(Type type);
 bool isCompType(Type type);

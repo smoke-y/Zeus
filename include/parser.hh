@@ -15,7 +15,6 @@ enum class ASTType{
     INTEGER,
     CHARACTER,
     DECIMAL,
-    BOOL,
     TYPE,
     IF,
     FOR,
@@ -30,6 +29,8 @@ enum class ASTType{
     ARRAY_AT,
     RETURN,
     CAST,
+    BREAK,
+    CONT,
 
     B_START,  //binary operators start
     B_ADD,
@@ -38,6 +39,7 @@ enum class ASTType{
     B_DIV,
     B_MOD,
     B_EQU,
+    B_NEQU,
     B_GRT,
     B_GEQU,
     B_LSR,
@@ -88,7 +90,6 @@ struct ASTNum : ASTBase{
     union{
         s64  integer;
         f64  decimal;
-        bool isTrue;
         char character;
     };
 };
@@ -101,6 +102,8 @@ struct ASTIf : ASTBase{
     Type zType;
 };
 struct ASTFor : ASTBase{
+    ASTTypeNode exprType;
+    String label;
     /*
      * infinite: expr = nullptr
      * c-while: end = nullptr
@@ -159,6 +162,12 @@ struct ASTModifier : ASTBase{
     ASTBase *child;
     VariableEntity *entity;
     u8 pAccessDepth;
+};
+struct ASTFlow : ASTBase{
+    union{
+        s32 relId;
+        String label;
+    };
 };
 struct ASTArrayAt : ASTBase{
     ASTTypeNode parentType;

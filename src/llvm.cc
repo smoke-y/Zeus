@@ -15,45 +15,66 @@
 #define WRITE(file, buff, len)
 #endif
 
-char* TypeToStringTable[] = {
-    "invalid",
-    "invalid_defer_cast",
-    "invalid_comp_string",
-    "i64",
-    "double",
-    "void",
-    "invalid_z_type_start",
-    "i8",
-    "i8",
-    "i8",
-    "i16",
-    "i16",
-    "i32",
-    "i32",
-    "float",
-    "i64",
-    "i64",
-    "double",
-    "invalid_z_type_end",
-};
-u32 TypeToSizeTable[] = {
-    0, 0, 0,
-    8, 8,
-    0, 0,
-    1, 1, 1,
-    2, 2,
-    4, 4, 4,
-    8, 8, 8,
-    0,
-};
-char* BinOpToStringTable[] = {
-    "add",
-    "sub",
-    "mul",
-    "div",
-    "rem",
-};
+namespace llvm{
+    char* TypeToStringTable[] = {
+        "invalid",
+        "invalid_defer_cast",
+        "invalid_comp_string",
+        "i64",
+        "double",
+        "void",
+        "invalid_z_type_start",
+        "i8",
+        "i8",
+        "i8",
+        "i16",
+        "i16",
+        "i32",
+        "i32",
+        "float",
+        "i64",
+        "i64",
+        "double",
+        "invalid_z_type_end",
+    };
+    u32 TypeToSizeTable[] = {
+        0, 0, 0,
+        8, 8,
+        0, 0,
+        1, 1, 1,
+        2, 2,
+        4, 4, 4,
+        8, 8, 8,
+        0,
+    };
+    char* BinOpToStringTable[] = {
+        "add",
+        "sub",
+        "mul",
+        "div",
+        "rem",
+        "eq",
+        "ne",
+        "gt",
+        "ge",
+        "lt",
+        "le",
+    };
+    static s32 curIfElseExitLabel = -1;
+    static s32 curForExitLabel = -1;
+    static s32 curForEntryLabel = -1;
+    static DynamicArray<u32> loopExitLabels;
+    static DynamicArray<u32> loopEntryLabels;
 
+    void init(){
+        loopEntryLabels.init();
+        loopExitLabels.init();
+    };
+    void uninit(){
+        loopEntryLabels.uninit();
+        loopExitLabels.uninit();
+    };
+};
 struct LLVMBucket{
     char buff[BUCKET_BUFFER_SIZE+1];    //+1 for null byte
     LLVMBucket *next;
@@ -104,14 +125,14 @@ struct LLVMFile{
 
 char *getLLVMType(ASTTypeNode *node){
     if(node->zType == Type::COMP_STRING || node->pointerDepth) return "ptr";
-    return TypeToStringTable[(u32)node->zType];
+    return llvm::TypeToStringTable[(u32)node->zType];
 }
 u32 getLLVMSize(ASTTypeNode *node){
     if(node->zType == Type::COMP_STRING || node->pointerDepth) return 8;
-    return TypeToSizeTable[(u32)node->zType];
+    return llvm::TypeToSizeTable[(u32)node->zType];
 }
 char *getLLVMBinOp(ASTType type){
-    return BinOpToStringTable[(u32)type - (u32)ASTType::B_START - 1];
+    return llvm::BinOpToStringTable[(u32)type - (u32)ASTType::B_START - 1];
 };
 s32 howCast(ASTTypeNode *n1, ASTTypeNode *n2){
     /*
@@ -253,7 +274,7 @@ u32 lowerExpression(ASTBase *root, LLVMFile &file, Type type){
         case ASTType::INTEGER:{
                                   ASTNum *num = (ASTNum*)root;
                                   char *typeStr = "i64";
-                                  if(type != Type::INVALID) typeStr = TypeToStringTable[(u32)type];
+                                  if(type != Type::INVALID) typeStr = llvm::TypeToStringTable[(u32)type];
                                   file.write("%%e%d = alloca %s\nstore %s %lld, ptr %%e%d\n", reg, typeStr, typeStr, num->integer, reg);
                               }break;
         case ASTType::PROC_CALL:{
@@ -305,18 +326,27 @@ u32 lowerExpression(ASTBase *root, LLVMFile &file, Type type){
         default:{
                     if(root->type > ASTType::B_START && root->type < ASTType::B_END){
                         ASTBinOp *binOp = (ASTBinOp*)root;
-                        u32 lreg = lowerExpression(binOp->lhs, file);
-                        u32 rreg = lowerExpression(binOp->rhs, file);
+                        u32 lreg = lowerExpression(binOp->lhs, file, binOp->zType.zType);
+                        u32 rreg = lowerExpression(binOp->rhs, file, binOp->zType.zType);
                         char *opStr = getLLVMBinOp(root->type);
-                        char sign = ' ';
-                        if(root->type == ASTType::B_DIV || root->type == ASTType::B_MOD) sign = isSigned(binOp->zType.zType)?'s':'u';
                         u32 ltmp = file.newReg();
                         u32 rtmp = file.newReg();
                         u32 atmp = file.newReg();
                         char *typeStr = getLLVMType(&binOp->zType);
+                        char sign = ' ';
+                        char *isCmp = " ";
+                        if(root->type == ASTType::B_DIV
+                                || root->type == ASTType::B_DIV
+                                || (root->type >= ASTType::B_GRT && root->type <= ASTType::B_LEQU)) sign = isSigned(binOp->zType.zType)?'s':'u';
+                        if(root->type >= ASTType::B_EQU && root->type <= ASTType::B_LEQU) isCmp = "icmp";
                         file.write("%%t%d = load %s, ptr %%e%d\n", ltmp, typeStr, lreg);
                         file.write("%%t%d = load %s, ptr %%e%d\n", rtmp, typeStr, rreg);
-                        file.write("%%t%d = %c%s %s %%t%d, %%t%d\n", atmp, sign, opStr, typeStr, ltmp, rtmp);
+                        file.write("%%t%d = %s %c%s %s %%t%d, %%t%d\n", atmp, isCmp, sign, opStr, typeStr, ltmp, rtmp);
+                        if(isCmp[0] != ' '){
+                            u32 tmpReg = file.newReg();
+                            file.write("%%t%d = zext i1 %%t%d to %s\n", tmpReg, atmp, typeStr);
+                            atmp = tmpReg;
+                        };
                         file.write("%%e%d = alloca %s\n", reg, typeStr);
                         file.write("store %s %%t%d, ptr %%e%d\n", typeStr, atmp, reg);
                     };
@@ -351,18 +381,35 @@ void lowerASTNode(ASTBase *node, LLVMFile &file){
                              }break;
         case ASTType::IF:{
                              ASTIf *If = (ASTIf*)node;
-                             char *typeStr = TypeToStringTable[(u32)If->zType];
+                             char *typeStr = llvm::TypeToStringTable[(u32)If->zType];
                              u32 exprReg = lowerExpression(If->expr, file, If->zType);
                              u32 ifBodyLabel = file.label++;
-                             u32 exitLabel = file.label++;
+                             u32 exitLabel;
+                             bool shouldResetCurExitLabel = false;
+                             if(llvm::curIfElseExitLabel == -1){
+                                 shouldResetCurExitLabel = true;
+                                 exitLabel = file.label++;
+                                 llvm::curIfElseExitLabel = exitLabel;
+                             }else exitLabel = llvm::curIfElseExitLabel;
                              u32 ifReg = file.newReg();
                              u32 ifExprReg = file.newReg();
                              file.write("%%t%d = load %s, ptr %%e%d\n", ifExprReg, typeStr, exprReg);
                              file.write("%%t%d = icmp eq %s %%t%d, 0\n", ifReg, typeStr, ifExprReg);
-                             file.write("br i1 %%t%d, label %%_%d, label %%_%d\n_%d:\n", ifReg, ifBodyLabel, exitLabel, ifBodyLabel);
-                             lowerBody(If->ifBody, If->ifBodyCount, file);
-                             file.write("br label %%_%d\n_%d:\n", exitLabel, exitLabel);
-                             if(If->elseBodyCount) lowerBody(If->elseBody, If->elseBodyCount, file);
+                             if(If->elseBodyCount){
+                                 u32 elseLabel = file.label++;
+                                 file.write("br i1 %%t%d, label %%_%d, label %%_%d\n_%d:\n", ifReg, elseLabel, ifBodyLabel, ifBodyLabel);
+                                 lowerBody(If->ifBody, If->ifBodyCount, file);
+                                 file.write("br label %%_%d\n", exitLabel);
+                                 file.write("_%d:\n", elseLabel);
+                                 lowerBody(If->elseBody, If->elseBodyCount, file);
+                             }else{
+                                 file.write("br i1 %%t%d, label %%_%d, label %%_%d\n_%d:\n", ifReg, exitLabel, ifBodyLabel, ifBodyLabel);
+                                 lowerBody(If->ifBody, If->ifBodyCount, file);
+                             };
+                             if(shouldResetCurExitLabel){
+                                 file.write("br label %%_%d\n_%d:\n", exitLabel, exitLabel);
+                                 llvm::curIfElseExitLabel = -1;
+                             };
                          }break;
         case ASTType::PROC_DECL:{
                                     ASTProcDefDecl *proc = (ASTProcDefDecl*)node;
@@ -477,12 +524,38 @@ void lowerASTNode(ASTBase *node, LLVMFile &file){
                                          };
                                      };
                                  }break;
+        case ASTType::CONT:{
+                                ASTFlow *flow = (ASTFlow*)node;
+                                if(flow->relId == -1){
+                                    file.write("br label %%_%d\n", llvm::curForEntryLabel);
+                                }else{
+                                    file.write("br label %%_%d\n", llvm::loopEntryLabels[flow->relId]);
+                                };
+                            }break;
+        case ASTType::BREAK:{
+                                ASTFlow *flow = (ASTFlow*)node;
+                                if(flow->relId == -1){
+                                    file.write("br label %%_%d\n", llvm::curForExitLabel);
+                                }else{
+                                    file.write("br label %%_%d\n", llvm::loopExitLabels[flow->relId]);
+                                };
+                            }break;
         case ASTType::FOR:{
                               ASTFor *For = (ASTFor*)node;
+                              u32 startLabel = file.label++;
+                              u32 exitLabel = file.label++;
+                              s32 prevForEntryLabel = llvm::curForEntryLabel;
+                              llvm::curForEntryLabel = startLabel;
+                              s32 prevForExitLabel = llvm::curForExitLabel;
+                              llvm::curForExitLabel = exitLabel;
+                              if(For->label.len != 0){
+                                  llvm::loopEntryLabels.push(startLabel);
+                                  llvm::loopExitLabels.push(exitLabel);
+                              };
                               if(For->end != nullptr){
                                   //c-for
                                   Type type = For->decl->zType->zType;
-                                  char *typeStr = TypeToStringTable[(u32)type];
+                                  char *typeStr = llvm::TypeToStringTable[(u32)type];
                                   u32 id = ((ASTVariable*)(For->decl->lhs[0]))->entity->id;
                                   file.write("%%r%d = alloca %s\n", id, typeStr);
                                   u32 initReg = lowerExpression(For->decl->rhs, file, type);
@@ -496,13 +569,11 @@ void lowerASTNode(ASTBase *node, LLVMFile &file){
                                   u32 tmpReg =file.newReg();
                                   file.write("%%t%d = load %s, ptr %%e%d\n", tmpReg, typeStr, initReg);
                                   file.write("store %s %%t%d, ptr %%r%d\n", typeStr, tmpReg, id);
-                                  u32 cmpLabel = file.label++;
                                   u32 bdyLabel = file.label++;
-                                  u32 exitLabel = file.label++;
                                   u32 cmpLoadReg1 = file.newReg();
                                   u32 cmpLoadReg2 = file.newReg();
                                   u32 cmpResReg = file.newReg();
-                                  file.write("br label %%_%d\n_%d:\n%%t%d = load %s, ptr %%r%d\n", cmpLabel, cmpLabel, cmpLoadReg1, typeStr, id);
+                                  file.write("br label %%_%d\n_%d:\n%%t%d = load %s, ptr %%r%d\n", startLabel, startLabel, cmpLoadReg1, typeStr, id);
                                   file.write("%%t%d = load %s, ptr %%e%d\n", cmpLoadReg2, typeStr, endReg);
                                   file.write("%%t%d = icmp slt %s %%t%d, %%t%d\n", cmpResReg, typeStr, cmpLoadReg1, cmpLoadReg2);
                                   file.write("br i1 %%t%d, label %%_%d, label %%_%d\n", cmpResReg, bdyLabel, exitLabel);
@@ -514,8 +585,31 @@ void lowerASTNode(ASTBase *node, LLVMFile &file){
                                   file.write("%%t%d = load %s, ptr %%e%d\n", updReg1, typeStr, stepReg);
                                   file.write("%%t%d = load %s, ptr %%r%d\n", updReg2, typeStr, id);
                                   file.write("%%t%d = add nsw %s %%t%d, %%t%d\n", updReg3, typeStr, updReg1, updReg2);
-                                  file.write("store %s %%t%d, ptr %%r%d\nbr label %%_%d\n", typeStr, updReg3, id, cmpLabel);
+                                  file.write("store %s %%t%d, ptr %%r%d\nbr label %%_%d\n", typeStr, updReg3, id, startLabel);
                                   file.write("_%d:\n", exitLabel);
+                              }else if(For->expr){
+                                  u32 bodyLabel = file.label++;
+                                  u32 decReg = file.newReg();
+                                  u32 tmpReg = file.newReg();
+                                  file.write("br label %%_%d\n_%d:\n", startLabel, startLabel);
+                                  u32 exprReg = lowerExpression(For->expr, file);
+                                  char *typeStr = getLLVMType(&For->exprType);
+                                  file.write("%%t%d = load %s, ptr %%e%d\n", tmpReg, typeStr, exprReg);
+                                  file.write("%%t%d = icmp eq %s %%t%d, 0\n", decReg, typeStr, tmpReg);
+                                  file.write("br i1 %%t%d, label %%_%d, label %%_%d\n", decReg, exitLabel, bodyLabel);
+                                  file.write("_%d:\n", bodyLabel);
+                                  lowerBody(For->body, For->bodyCount, file);
+                                  file.write("br label %%_%d\n_%d:\n", startLabel, exitLabel);
+                              }else{
+                                  file.write("br label %%_%d\n_%d:\n", startLabel, startLabel);
+                                  lowerBody(For->body, For->bodyCount, file);
+                                  file.write("br label %%_%d\n_%d:\n", startLabel, exitLabel);
+                              };
+                              llvm::curForExitLabel = prevForExitLabel;
+                              llvm::curForEntryLabel = prevForEntryLabel;
+                              if(For->label.len != 0){
+                                  llvm::loopEntryLabels.pop();
+                                  llvm::loopExitLabels.pop();
                               };
                           }break;
         default:{
@@ -586,7 +680,7 @@ GLOBAL_WRITE_LLVM_TO_BUFF:
             case ASTType::CHARACTER:
             case ASTType::INTEGER:{
                                       ASTNum *num = (ASTNum*)assdecl->rhs;
-                                      temp = snprintf(buff+cursor, BUFF_SIZE-cursor, "@g%d = dso_local global %s %lld\n", var->entity->id, TypeToStringTable[(u32)var->entity->type], num->integer);
+                                      temp = snprintf(buff+cursor, BUFF_SIZE-cursor, "@g%d = dso_local global %s %lld\n", var->entity->id, llvm::TypeToStringTable[(u32)var->entity->type], num->integer);
                                   }break;
         };
         if(temp + cursor >= BUFF_SIZE){

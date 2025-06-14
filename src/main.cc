@@ -78,7 +78,9 @@ s32 main(s32 argc, char **argv){
         };
     };
     if(report::warnOff != 0) report::flushReports();
+    llvm::init();
     lowerToLLVM("bin/out.ll", globals);
+    llvm::uninit();
     char instrBuff[1025];
     u32 curs = snprintf(instrBuff, 1025, "clang -Wno-override-module ");
     for(u32 x=0; x<(u32)LinkConfigCLibs::COUNT; x++){

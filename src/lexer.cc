@@ -26,10 +26,11 @@ namespace Word{
         {"true", TokType::K_TRUE},
         {"false", TokType::K_FALSE},
         {"for", TokType::K_FOR},
-        {"const", TokType::K_CONSTANT},
         {"else", TokType::K_ELSE},
         {"return", TokType::K_RETURN},
         {"defer", TokType::K_DEFER},
+        {"break", TokType::K_BREAK},
+        {"continue", TokType::K_CONT},
     };
     const WordData poundwordsData[] = {
         {"import", TokType::P_IMPORT},

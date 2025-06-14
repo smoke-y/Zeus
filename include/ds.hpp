@@ -221,6 +221,20 @@ struct HashmapStr{
         };
         return false;
     };
+    void removeValue(String key){
+        u32 startHash = hashFunc(key) % len;
+        u32 hash = startHash;
+        while(status[hash] == true){
+            if(cmpString(key, keys[hash])){
+                status[hash] = false;
+                count--;
+                return;
+            };
+            hash += 1;
+            if(hash >= len){hash = 0;};
+            if (hash == startHash){return;};
+        };
+    };
 };
 //NOTE: only for int types
 template <typename T, typename J>

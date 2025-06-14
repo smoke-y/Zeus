@@ -28,12 +28,14 @@ namespace check{
     static HashmapStr structToOff;
     static DynamicArray<StructEntity> structEntities;
     static ASTReturn defaultReturn;
+    static HashmapStr loopLabels;
 
     void init(){
         defaultReturn.retCount = 0;
         u32 size = sizeof(Scope) * dep::lexers.count;
         globalScopes = (Scope*)mem::alloc(size);
         memset(globalScopes, 0, size);
+        loopLabels.init();
         structToOff.init();
         initializerLists.init();
         structEntities.init();
@@ -42,6 +44,7 @@ namespace check{
         stringToId.init();
     };
     void uninit(){
+        loopLabels.uninit();
         structToOff.uninit();
         initializerLists.uninit();
         structEntities.uninit();
@@ -191,12 +194,13 @@ Type checkTree(Lexer &lexer, ASTBase **nnode, DynamicArray<Scope*> &scopes, u32 
     ASTBase *node = *nnode;
     Type treeType;
     if(node->type == ASTType::INITIALIZER_LIST){
+        typeCheckPd--;
         ASTInitializerList *il = (ASTInitializerList*)node;
         treeType = checkTree(lexer, &il->elements[0], scopes, pointerDepth, typeCheck, typeCheckPd);
         for(u32 x=1; x<il->elementCount; x++){
             u32 pd;
             Type elemType = checkTree(lexer, &il->elements[x], scopes, pd, typeCheck, typeCheckPd);
-            if(isCompType(elemType) == false){
+            if(il->elements[x]->type != ASTType::INTEGER && il->elements[x]->type != ASTType::DECIMAL && il->elements[x]->type != ASTType::STRING && il->elements[x]->type != ASTType::CHARACTER){
                 lexer.emitErr(il->tokenOff, "Elements %d has to be a compile time type", x);
                 return Type::INVALID;
             };
@@ -221,7 +225,7 @@ Type checkTree(Lexer &lexer, ASTBase **nnode, DynamicArray<Scope*> &scopes, u32 
     if(cast == nullptr){
         if(canWeCast(treeType, pointerDepth, typeCheck, typeCheckPd, node->tokenOff, lexer) == false) return Type::INVALID;
         if(implicitOk(treeType, typeCheck)){
-            if(treeType == typeCheck || isCompType(treeType)) return treeType;
+            if(treeType == typeCheck || isCompType(treeType)) return typeCheck;
             //alloc a cast node and poke it for an implicit casting
             cast = (ASTCast*)curASTFileForCastNodeAlloc->newNode(sizeof(ASTCast), ASTType::CAST, 0);
             cast->targetType = (ASTTypeNode*)curASTFileForCastNodeAlloc->newNode(sizeof(ASTTypeNode), ASTType::TYPE, 0);
@@ -418,6 +422,8 @@ Type _checkTree(Lexer &lexer, ASTBase **nnode, DynamicArray<Scope*> &scopes, u32
                         };
                         if(lhsType > Type::Z_TYPE_END) type = lhsType;
                         else if(rhsType > Type::Z_TYPE_END) type = rhsType;
+                        else if(isCompType(lhsType)) type = rhsType;
+                        else if(isCompType(rhsType)) type = lhsType;
                         else type = (lhsType <= rhsType)?lhsType:rhsType;
                         pointerDepth = (lhsUsingPointer < rhsUsingPointer)?rhsUsingPointer:lhsUsingPointer;
                         binOp->zType.zType = type;
@@ -585,6 +591,14 @@ u32 checkFor(ASTFor *For, DynamicArray<Scope*> &scopes, Lexer &lexer){
     Scope *scope = scopes[scopes.count-1];
     Scope *body = check::newBlockScope(scope->varId);
     scopes.push(body);
+    if(For->label.len != 0){
+        u32 val;
+        if(check::loopLabels.getValue(For->label, &val)){
+            lexer.emitErr(For->tokenOff, "Loop name(%.*s) has already been taken", For->label.len, For->label.mem);
+            return 0;
+        }; 
+        check::loopLabels.insertValue(For->label, check::loopLabels.count);
+    };
     if(For->end != nullptr){
         //c-for
         if(For->decl->lhsCount != 1){
@@ -610,14 +624,19 @@ u32 checkFor(ASTFor *For, DynamicArray<Scope*> &scopes, Lexer &lexer){
                 return 0;
             };
         };
-    }else{
+    }else if(For->expr){
         //c-while
-        if(!checkASTNode(lexer, For->expr, scopes)) return false;
+        u32 pd;
+        Type type = checkTree(lexer, &For->expr, scopes, pd, Type::INVALID);
+        if(type == Type::INVALID) return false;
+        For->exprType.zType = type;
+        For->exprType.pointerDepth = pd;
     };
     for(u32 x=0; x<For->bodyCount; x++){
         if(!checkASTNode(lexer, For->body[x], scopes)) return false;
     };
     scopes.pop();
+    if(For->label.len != 0) check::loopLabels.removeValue(For->label);
     return body->varId;
 };
 bool checkProc(ASTProcDefDecl *proc, DynamicArray<Scope*> &scopes, Lexer &lexer, bool isDecl){
@@ -775,6 +794,18 @@ bool checkASTNode(Lexer &lexer, ASTBase *node, DynamicArray<Scope*> &scopes){
     DEFER(scope->varId = newId);
     switch(node->type){
         case ASTType::RETURN: return true;
+        case ASTType::CONT:
+        case ASTType::BREAK:{
+                                ASTFlow *flow = (ASTFlow*)node;
+                                if(flow->label.len != 0){
+                                    u32 val;
+                                    if(check::loopLabels.getValue(flow->label, &val) == false){
+                                        lexer.emitErr(flow->tokenOff, "Label(%.*s) not defined", flow->label.len, flow->label.mem);
+                                        return false;
+                                    };
+                                    flow->relId = val;
+                                }else flow->relId = -1;
+                            }break;
         case ASTType::FOR:{
                               newId = checkFor((ASTFor*)node, scopes, lexer);
                               if(newId == 0) return false;

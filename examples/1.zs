@@ -36,6 +36,15 @@ main :: proc(){
     //the compiler will figure out the type
     y := 69
 
+    if x==4{
+        printf("x is 4\n")
+        //you can add brackets around expression if you want
+    }else if(x == 3){
+        printf("x is 3\n")
+    } else {
+        printf("i don't know what x is\n")
+    }
+
     //c-style for loops
     printf("[%s %d]\n", z, 1)
     //start from 0 and go upto 4-1=3
@@ -43,10 +52,58 @@ main :: proc(){
         printf("%d\n", a)
     }
 
-    printf("[loop 02]\n")
-    //start from 0 and increment by 2
+    //c-style for loops with increment
+    printf("[loop 2]\n")
     y = 2
     for a:=0...4..y{
         printf("%d\n", a)
     }
+
+    //c-style while loop
+    printf("[loop 3]\n")
+    x = 0
+    for x != 4{
+        printf("%d\n", x)
+        x = x + 1
+    }
+
+    //named-loops for complex control flow
+    printf("[loop 4]\n")
+    x = 0
+    for "outer-loop" g:=0...3{
+        for {
+            printf("%d\n", x)
+                if x == 3{
+                    break "outer-loop"
+                }
+            x = x + 1
+        }
+    }
+
+    printf("[loop 5]\n")
+    for "outer-loop" g:=0...3{
+        x = 0
+        for {
+            printf("%d %d\n", g, x)
+                if x == 3{
+                    g = g + 1
+                    continue "outer-loop"
+                }
+            x = x + 1
+        }
+    }
+
+    printf("[loop 6]\n")
+    g: ^u32 = {10,9,8,7,6,5}
+    for a:=0...6{
+        printf("%d\n", g[a])
+    }
+
+    x = 69 
+    pointerToX := &x
+    pointerToPointerToX := &pointerToX
+    //pointer resolution: right side
+    //pointer type declaration: left side
+    pointerToPointerToPointerToX : ^^^u32 = &pointerToPointerToX
+    printf("%p -> %d\n", pointerToX, pointerToPointerToPointerToX^^^)
 }

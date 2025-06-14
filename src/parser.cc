@@ -95,7 +95,7 @@ u32 getOperatorPriority(ASTType op){
 };
 s32 getBracketEnding(DynamicArray<TokType> &src, u32 off, char braOpen, char braClose){
     u32 level = 1;
-    while(src[off] != (TokType)('\n') || src[off] != TokType::END_OF_FILE){
+    while(src[off] != (TokType)('\n') && src[off] != TokType::END_OF_FILE){
         if(src[off] == (TokType)braOpen) level++;
         else if(src[off] == (TokType)braClose) level--;
         if(level == 0) return off;
@@ -105,7 +105,7 @@ s32 getBracketEnding(DynamicArray<TokType> &src, u32 off, char braOpen, char bra
 };
 s32 getTokenOff(TokType type, Lexer &lexer, u32 x){
     BRING_TOKENS_TO_SCOPE;
-    while(tokTypes[x] != TokType::END_OF_FILE || tokTypes[x] != (TokType)'\n'){
+    while(tokTypes[x] != TokType::END_OF_FILE && tokTypes[x] != (TokType)'\n'){
         x++;
         if(tokTypes[x] == type) return x;
     };
@@ -285,8 +285,8 @@ ASTBase* _genASTExprTree(Lexer &lexer, ASTFile &file, u32 &xArg, u8 &bracketArg,
                               }break;
         case TokType::K_FALSE:
         case TokType::K_TRUE:{
-                                 ASTNum *num = (ASTNum*)file.newNode(sizeof(ASTNum), ASTType::BOOL, x);
-                                 num->isTrue = (tokTypes[x] == TokType::K_TRUE)?true:false;
+                                 ASTNum *num = (ASTNum*)file.newNode(sizeof(ASTNum), ASTType::INTEGER, x);
+                                 num->integer = (tokTypes[x] == TokType::K_TRUE)?1:0;
                                  lhs = num;
                              }break;
         case TokType::IDENTIFIER:{
@@ -358,9 +358,20 @@ ASTBase* _genASTExprTree(Lexer &lexer, ASTFile &file, u32 &xArg, u8 &bracketArg,
         case (TokType)'+': type = ASTType::B_ADD; break;
         case (TokType)'*': type = ASTType::B_MUL; break;
         case (TokType)'/': type = ASTType::B_DIV; break;
+        case (TokType)'!':{
+                              if(tokTypes[x+1] == (TokType)'='){
+                                  x++;
+                                  type = ASTType::B_NEQU;
+                              }else{
+                                  lexer.emitErr(x+1, "Expected '='");
+                                  return nullptr;
+                              };
+                          }break; 
         case (TokType)'=':{
-                              if(tokTypes[x+1] == (TokType)'=') type = ASTType::B_EQU;
-                              else{
+                              if(tokTypes[x+1] == (TokType)'='){
+                                  x++;
+                                  type = ASTType::B_EQU;
+                              }else{
                                   lexer.emitErr(x+1, "Expected '='");
                                   return nullptr;
                               };
@@ -561,10 +572,15 @@ ASTFor* parseForLoop(Lexer &lexer, ASTFile &file, u32 &xArg){
     BRING_TOKENS_TO_SCOPE;
     u32 x = xArg;
     DEFER(xArg = x);
-    ASTFor *For = (ASTFor*)file.newNode(sizeof(ASTFor), ASTType::FOR, x);
-    x++;
     s32 bodyStart = getBodyStartOrReportErr(x, lexer);
     if(bodyStart == -1) return nullptr;
+    ASTFor *For = (ASTFor*)file.newNode(sizeof(ASTFor), ASTType::FOR, x);
+    For->end = nullptr;
+    x++;
+    if(tokTypes[x] == TokType::DOUBLE_QUOTES){
+        For->label = makeStringFromTokOff(x, lexer);
+        x++;
+    }else For->label.len = 0;
     s32 tdot = getTokenOff(TokType::TDOT, lexer, x);
     if(tdot != -1){
         //c-for
@@ -584,15 +600,14 @@ ASTFor* parseForLoop(Lexer &lexer, ASTFile &file, u32 &xArg){
             For->step = node;
         }else For->step = nullptr;
     }else{
-        if(tokTypes[x] != (TokType)'{' || tokTypes[x] != (TokType)':'){
+        if(tokTypes[x] != (TokType)'{' && tokTypes[x] != (TokType)':'){
             //c-while
             ASTBase *node = genASTExprTree(lexer, file, x, bodyStart);
             if(!node) return nullptr;
             For->expr = node;
-            For->end = nullptr;
         }else{
             //for ever
-            For->decl = nullptr;
+            For->expr = nullptr;
         };
     };
     u32 count;
@@ -801,6 +816,22 @@ bool parseBlock(Lexer &lexer, ASTFile &file, DynamicArray<ASTBase*> &table, u32 
                                    file.dependencies.push(stat);
                                    x++;
                                }break;
+        case TokType::K_CONT:{
+                                  ASTFlow *flow = (ASTFlow*)file.newNode(sizeof(ASTFlow), ASTType::CONT, x);
+                                  x++;
+                                  if(tokTypes[x] == (TokType)'\n') flow->label.len = 0;
+                                  else if(tokTypes[x] == TokType::DOUBLE_QUOTES) flow->label = makeStringFromTokOff(x, lexer);
+                                  else lexer.emitErr(x, "Expected a string or a new line");
+                                  table.push(flow);
+                              }break;
+        case TokType::K_BREAK:{
+                                  ASTFlow *flow = (ASTFlow*)file.newNode(sizeof(ASTFlow), ASTType::BREAK, x);
+                                  x++;
+                                  if(tokTypes[x] == (TokType)'\n') flow->label.len = 0;
+                                  else if(tokTypes[x] == TokType::DOUBLE_QUOTES) flow->label = makeStringFromTokOff(x, lexer);
+                                  else lexer.emitErr(x, "Expected a string or a new line");
+                                  table.push(flow);
+                              }break;
         case TokType::K_DEFER:{
                                   x++;
                                   if(tokTypes[x] == (TokType)'{'){
@@ -885,7 +916,18 @@ bool parseBlock(Lexer &lexer, ASTFile &file, DynamicArray<ASTBase*> &table, u32 
                                      bool shouldParseAssOrDecl = false;
                                      u32 v = x;
                                      while(tokTypes[v] != (TokType)'\n' && tokTypes[v] != TokType::END_OF_FILE){
-                                         if((tokTypes[v] == (TokType)'=' && tokTypes[v+1] != (TokType)'=') || tokTypes[v] == (TokType)':'){
+                                         if(tokTypes[v] == (TokType)'='){
+                                             switch(tokTypes[v-1]){
+                                                 case (TokType)'<':
+                                                 case (TokType)'>':
+                                                 case (TokType)'!': v++; continue;
+                                                 default: shouldParseAssOrDecl = true; 
+                                             }
+                                             if(tokTypes[v+1] != (TokType)'='){
+                                                 shouldParseAssOrDecl = true;
+                                                 break;
+                                             };
+                                         }else if(tokTypes[v] == (TokType)':'){
                                              shouldParseAssOrDecl = true;
                                              break;
                                          };
@@ -959,15 +1001,24 @@ namespace dbg{
                                     ASTUnOp *unOp = (ASTUnOp*)node;
                                     dumpASTNode(unOp->child, lexer, padding+1);
                                 }break;
-            case ASTType::BOOL:{
-                                   ASTNum *num = (ASTNum*)node;
-                                   printf("bool");
-                                   PLOG("value: %s", (num->isTrue)?"true":"false");
-                               }break;
             case ASTType::CHARACTER:{
                                         ASTNum *num = (ASTNum*)node;
                                         printf("character");
                                         PLOG("value: \'%c\'(%d)", num->character, (u8)num->character);
+                                    }break;
+            case ASTType::CONT:{
+                                        ASTFlow *flow = (ASTFlow*)node;
+                                        printf("continue");
+                                        if(flow->label.len != 0){
+                                            PLOG("label: %.*s", flow->label.len, flow->label.mem);
+                                        };
+                                    }break;
+            case ASTType::BREAK:{
+                                        ASTFlow *flow = (ASTFlow*)node;
+                                        printf("break");
+                                        if(flow->label.len != 0){
+                                            PLOG("label: %.*s", flow->label.len, flow->label.mem);
+                                        };
                                     }break;
             case ASTType::STRING:{
                                      ASTString *str = (ASTString*)node;
@@ -1058,7 +1109,7 @@ namespace dbg{
                                   ASTFor *For = (ASTFor*)node;
                                   if(For->expr == nullptr && For->decl == nullptr){
                                       printf("for ever");
-                                  }else if(For->decl != nullptr){
+                                  }else if(For->end != nullptr){
                                       printf("for(c-for)");
                                       dumpASTNode(For->decl, lexer, padding+1);
                                       PLOG("end:");

@@ -35,6 +35,7 @@ namespace llvm{
         "i64",
         "i64",
         "double",
+        "i64",    //ptr
         "invalid_z_type_end",
     };
     u32 TypeToSizeTable[] = {
@@ -242,14 +243,24 @@ u32 lowerExpression(ASTBase *root, LLVMFile &file, Type type){
                                file.write("%%e%d = alloca %s\n", reg, tarType);
                                file.write("store %s %%t%d, ptr %%e%d\n", tarType, tempReg, reg);
                            }break;
+        case ASTType::GLOBAL:{
+                                 ASTVariable *var = (ASTVariable*)root;
+                                 VariableEntity *entity = var->entity;
+                                 ASTTypeNode typeNode;
+                                 typeNode.zType = entity->type;
+                                 typeNode.pointerDepth = 0;
+                                 char *type = getLLVMType(&typeNode);
+                                 u32 tmpReg = file.newReg();
+                                 file.write("%%t%d = load %s, ptr @g%d\n", tmpReg, type, entity->id);
+                                 file.write("%%e%d = alloca %s\nstore %s %%t%d, ptr %%e%d\n", reg, type, type, tmpReg, reg);
+                             }break;
         case ASTType::VARIABLE:{
                                    ASTVariable *var = (ASTVariable*)root;
                                    VariableEntity *entity = var->entity;
                                    ASTTypeNode typeNode;
                                    typeNode.zType = entity->type;
                                    typeNode.pointerDepth = var->pAccessDepth;
-                                   char *type = getLLVMType(&typeNode);
-                                   if(var->pAccessDepth == 0) file.write("%%e%d = bitcast %s* %%r%d to %s*\n", reg, type, entity->id, type);
+                                   if(var->pAccessDepth == 0) file.write("%%e%d = bitcast ptr %%r%d to ptr\n", reg, entity->id);
                                    else{
                                        if(var->pAccessDepth == 1){
                                            file.write("%%e%d = load ptr, ptr %%r%d\n", reg, entity->id);
@@ -305,8 +316,8 @@ u32 lowerExpression(ASTBase *root, LLVMFile &file, Type type){
                                     else{
                                         if(proc->argCount != 0){
                                             for(u32 x=0;;){
-                                                type = getLLVMType(&proc->types[x]);
-                                                file.write("%s %%t%d", type, inputRegStart + x);
+                                                char *itype = getLLVMType(&proc->types[x]);
+                                                file.write("%s %%t%d", itype, inputRegStart + x);
                                                 if(++x == proc->argCount) break;
                                                 file.write(", ");
                                             };
@@ -344,7 +355,13 @@ u32 lowerExpression(ASTBase *root, LLVMFile &file, Type type){
                         file.write("%%t%d = %s %c%s %s %%t%d, %%t%d\n", atmp, isCmp, sign, opStr, typeStr, ltmp, rtmp);
                         if(isCmp[0] != ' '){
                             u32 tmpReg = file.newReg();
-                            file.write("%%t%d = zext i1 %%t%d to %s\n", tmpReg, atmp, typeStr);
+                            if(binOp->zType.pointerDepth == 0){
+                                file.write("%%t%d = zext i1 %%t%d to %s\n", tmpReg, atmp, typeStr);
+                            }else{
+                                u32 ntmpReg = file.newReg();
+                                file.write("%%t%d = zext i1 %%t%d to i64\n", ntmpReg, atmp);
+                                file.write("%%t%d = inttoptr i64 %%t%d to ptr\n", tmpReg, ntmpReg);
+                            };
                             atmp = tmpReg;
                         };
                         file.write("%%e%d = alloca %s\n", reg, typeStr);
@@ -478,11 +495,12 @@ void lowerASTNode(ASTBase *node, LLVMFile &file){
                                           ASTTypeNode typeNode;
                                           typeNode.zType = var->entity->type;
                                           typeNode.pointerDepth = var->entity->pointerDepth;
-                                          u32 expReg = lowerExpression(decl->rhs, file, typeNode.zType);
                                           u32 id = var->entity->id;
-                                          u32 tempReg = file.newReg();
                                           char *typeStr = getLLVMType(&typeNode);
                                           file.write("%%r%d = alloca %s\n", id, typeStr);
+                                          if(decl->rhs == nullptr) break;
+                                          u32 expReg = lowerExpression(decl->rhs, file, typeNode.zType);
+                                          u32 tempReg = file.newReg();
                                           file.write("%%t%d = load %s, ptr %%e%d\n", tempReg, typeStr, expReg);
                                           file.write("store %s %%t%d, ptr %%r%d\n", typeStr, tempReg, id);
                                       }else{

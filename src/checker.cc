@@ -70,7 +70,8 @@ namespace check{
     };
 };
 
-VariableEntity *getVariableEntity(ASTBase *node, DynamicArray<Scope*> &scopes){
+VariableEntity *getVariableEntity(ASTBase *node, DynamicArray<Scope*> &scopes, bool &isGlobal){
+    isGlobal = false;
     String name;
     switch(node->type){
         case ASTType::VARIABLE:{
@@ -88,6 +89,7 @@ VariableEntity *getVariableEntity(ASTBase *node, DynamicArray<Scope*> &scopes){
         Scope *scope = scopes[x];
         u32 off;
         if(!scope->var.getValue(name, &off)) continue;
+        if(scope->type == ScopeType::GLOBAL) isGlobal = true;
         return scope->vars[off];
     };
     return nullptr;
@@ -117,6 +119,13 @@ bool fillTypeInfo(Lexer &lexer, ASTTypeNode *node){
     BRING_TOKENS_TO_SCOPE;
     if(isType(tokTypes[node->tokenOff])){
         node->zType = (Type)((u32)tokTypes[node->tokenOff] - (u32)TokType::K_TYPE_START + (u32)(Type::Z_TYPE_START));
+        if(node->zType == Type::PTR){
+            if(node->pointerDepth > 0){
+                lexer.emitErr(node->tokenOff, "rawptr has to have pointer depth 0");
+                return false;
+            };
+            node->pointerDepth = 1;
+        };
         return true;
     };
     if(tokTypes[node->tokenOff] != TokType::IDENTIFIER){
@@ -164,6 +173,7 @@ Type checkModifierChain(Lexer &lexer, ASTBase *root, VariableEntity *entity){
 };
 u64 getSize(Lexer &lexer, Type type, u32 tokenOff){
     switch(type){
+        case Type::PTR:
         case Type::COMP_STRING:
         case Type::COMP_DECIMAL:
         case Type::COMP_INTEGER:
@@ -348,7 +358,10 @@ Type _checkTree(Lexer &lexer, ASTBase **nnode, DynamicArray<Scope*> &scopes, u32
                                         typeNode->pointerDepth = pd;
                                     };
                                     if(entity->outputCount == 0) type = Type::VOID;
-                                    else type = entity->outputs[0]->zType;
+                                    else{
+                                        type = entity->outputs[0]->zType;
+                                        pointerDepth = entity->outputs[0]->pointerDepth;
+                                    };
                                 }break;
         case ASTType::STRING:{
                                  u32 off;
@@ -359,7 +372,8 @@ Type _checkTree(Lexer &lexer, ASTBase **nnode, DynamicArray<Scope*> &scopes, u32
                                  type = Type::COMP_STRING;
                              }break;
         case ASTType::VARIABLE:{
-                                   VariableEntity *entity = getVariableEntity(node, scopes);
+                                   bool isGloabl;
+                                   VariableEntity *entity = getVariableEntity(node, scopes, isGloabl);
                                    ASTVariable *var = (ASTVariable*)node;
                                    if(entity == nullptr){
                                        lexer.emitErr(var->tokenOff, "Variable not defined");
@@ -372,10 +386,12 @@ Type _checkTree(Lexer &lexer, ASTBase **nnode, DynamicArray<Scope*> &scopes, u32
                                    };
                                    pointerDepth += var->pAccessDepth?entity->pointerDepth - var->pAccessDepth:entity->pointerDepth;
                                    type = entity->type;
+                                   if(isGloabl) node->type = ASTType::GLOBAL;
                                }break;
         case ASTType::MODIFIER:{
                                    ASTModifier *mod = (ASTModifier*)node;
-                                   VariableEntity *entity = getVariableEntity(node, scopes);
+                                   bool isGlobal;
+                                   VariableEntity *entity = getVariableEntity(node, scopes, isGlobal);
                                    if(entity == nullptr){
                                        lexer.emitErr(mod->tokenOff, "Variable not defined");
                                        return Type::INVALID;
@@ -484,6 +500,7 @@ u64 checkDecl(ASTAssDecl *assdecl, DynamicArray<Scope*> &scopes, Lexer &lexer, b
     if(assdecl->rhs){
         u32 treePointerDepth;
         Type treeType = checkTree(lexer, &assdecl->rhs, scopes, treePointerDepth, assdecl->zType->zType, assdecl->zType->pointerDepth);
+        ASTVariable *var = (ASTVariable*) assdecl->lhs[0];
         if(treeType == Type::INVALID) return 0;
         if(assdecl->zType->zType == Type::INVALID){
             assdecl->zType->zType = treeType;
@@ -509,7 +526,8 @@ u64 checkDecl(ASTAssDecl *assdecl, DynamicArray<Scope*> &scopes, Lexer &lexer, b
             lexer.emitErr(assdecl->tokenOff, "%d lhs has to be a variable", x);
             return 0;
         };
-        if(getVariableEntity(lhsNode, scopes)){
+        bool isGlobal;
+        if(getVariableEntity(lhsNode, scopes, isGlobal)){
             lexer.emitErr(tokenOff, "Redefinition");
             return 0;
         };
@@ -543,9 +561,10 @@ bool checkAss(ASTAssDecl *assdecl, DynamicArray<Scope*> &scopes, Lexer &lexer){
     DynamicArray<VariableEntity*> entities;
     entities.init();
     DEFER(entities.uninit());
+    bool isGlobal;
     for(u32 x=0; x<assdecl->lhsCount; x++){
         ASTBase *node = assdecl->lhs[x];
-        VariableEntity *entity = getVariableEntity(node, scopes);
+        VariableEntity *entity = getVariableEntity(node, scopes, isGlobal);
         if(node->type == ASTType::VARIABLE){
             if(entity == nullptr){
                 lexer.emitErr(assdecl->tokenOff, "Variable not defined in LHS(%d)", x);

@@ -30,6 +30,7 @@ enum class TokType {
     K_U64,
     K_S64,
     K_F64,
+    K_PTR,
     K_TYPE_END,    //type end
     K_PROC_DEF,
     K_PROC_DECL,

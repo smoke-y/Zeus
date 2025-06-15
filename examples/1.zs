@@ -20,6 +20,11 @@
 printf :: proc_decl(^char, ...)
 
 //a procedure defenition
+swap :: proc(x,y :u32) -> (u32, u32){
+    //swapping without 3rd variable
+    return y, x
+}
+
 main :: proc(){
     //no need for ';'
     printf("Hello, World\n")
@@ -106,4 +111,9 @@ main :: proc(){
     //pointer type declaration: left side
     pointerToPointerToPointerToX : ^^^u32 = &pointerToPointerToX
     printf("%p -> %d\n", pointerToX, pointerToPointerToPointerToX^^^)
+
+    //multilpe return
+    a,b := swap(1,2)
+    printf("%d%d\n", a,b)
 }
+

@@ -23,6 +23,7 @@ enum class ASTType{
     STRUCT,
     MODIFIER,
     VARIABLE,
+    GLOBAL,
     PROC_CALL,
     INITIALIZER_LIST,
     STRING,

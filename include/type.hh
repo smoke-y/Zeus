@@ -22,6 +22,7 @@ enum class Type{
     U64,
     S64,
     F64,
+    PTR,
     Z_TYPE_END,
 };
 

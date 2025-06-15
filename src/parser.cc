@@ -738,6 +738,7 @@ ASTProcDefDecl *parseProc(Lexer &lexer, ASTFile &file, u32 &xArg, bool isDecl){
             ASTTypeNode *output = genASTTypeNode(lexer, file, x);
             if(!output) return nullptr;
             outputs.push(output);
+            if(tokTypes[x] == (TokType)'\n') break;
             if(tokTypes[x] == (TokType)')'){
                 if(!bracket){
                     lexer.emitErr(x, "No opening bracket to match this closing bracket");
@@ -852,8 +853,8 @@ bool parseBlock(Lexer &lexer, ASTFile &file, DynamicArray<ASTBase*> &table, u32 
         case TokType::K_RETURN:{
                                    for(u32 i=0; i<deferStatements.count; i++) table.push(deferStatements[i]);
                                    ASTReturn *ret = (ASTReturn*)file.newNode(sizeof(ASTReturn), ASTType::RETURN, x);
-                                   x++;
                                    s32 nend = getTokenOff((TokType)'\n', lexer, x);
+                                   x++;
                                    if(nend == -1){
                                        lexer.emitErr(x, "Expected new line at the end");
                                        return false;
@@ -877,7 +878,7 @@ bool parseBlock(Lexer &lexer, ASTFile &file, DynamicArray<ASTBase*> &table, u32 
                                        memcpy(ret->exprs, rets.mem, count);
                                    };
                                    ret->retCount = rets.count;
-                                   ret->types = (ASTTypeNode*)mem::alloc(sizeof(ASTTypeNode) * rets.count);
+                                   if(ret->retCount) ret->types = (ASTTypeNode*)mem::alloc(sizeof(ASTTypeNode) * rets.count);
                                    table.push(ret);
                                }break;
         case TokType::K_FOR:{

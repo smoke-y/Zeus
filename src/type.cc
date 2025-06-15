@@ -19,6 +19,7 @@ char* typeToStrTable[] = {
     "u64",
     "s64",
     "f64",
+    "ptr",
     "z_type_end",
 };
 
@@ -64,12 +65,14 @@ bool isDecimal(Type type){
 };
 bool canWeCast(Type t1, u32 pd1, Type t2, u32 pd2, u32 off, Lexer &lexer){
     if(t2 == Type::VOID || t1 == Type::VOID) return false;
-    if(isInteger(t1) ^ isInteger(t2)){
-        lexer.emitErr(off, "Both have to be integers");
-        return false;
-    }else if(isDecimal(t1) ^ isDecimal(t2)){
-        lexer.emitErr(off, "Both have to be decimals");
-        return false;
+    if(pd1 == 0 && pd2 == 0){
+        if(isInteger(t1) ^ isInteger(t2)){
+            lexer.emitErr(off, "Both have to be integers");
+            return false;
+        }else if(isDecimal(t1) ^ isDecimal(t2)){
+            lexer.emitErr(off, "Both have to be decimals");
+            return false;
+        };
     };
     if(t2 == Type::COMP_STRING){
         t2 = t1;
@@ -129,6 +132,6 @@ bool implicitOk(Type t1, Type t2){
         case Type::COMP_STRING: return true;
     };
     if(t1 == Type::CHAR && t2 == Type::CHAR) return true; 
-    if(t1 > t2) return false;
+    if(t1 > t2 && t1 != Type::PTR) return false;
     return true;
 };

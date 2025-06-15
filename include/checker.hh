@@ -21,6 +21,7 @@ struct VariableEntity{
 struct StructEntity{
     Scope *body;
     u64 size;
+    u32 id;
 };
 struct ProcEntity{
     union{

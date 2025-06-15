@@ -196,6 +196,22 @@ u32 lowerExpression(ASTBase *root, LLVMFile &file, Type type){
         case ASTType::U_MEM:{
                                 lowerUnop(reg, (ASTUnOp*)root, file);
                             }break;
+        case ASTType::MODIFIER:{
+                                   ASTModifier *mod = (ASTModifier*)root;
+                                   //TODO: maybe not?
+                                   ASTVariable *var = (ASTVariable*)mod->child;
+                                   u32 structOff = (u32)mod->entity->type - (u32)Type::Z_TYPE_END - 1;
+                                   StructEntity &strEnt = check::structEntities[structOff];
+                                   Scope *structScope = strEnt.body;
+                                   u32 memOff;
+                                   structScope->var.getValue(var->name, &memOff);
+                                   VariableEntity *varEntity = structScope->vars[memOff];
+                                   ASTTypeNode typeNode;
+                                   typeNode.zType = varEntity->type;
+                                   typeNode.pointerDepth = varEntity->pointerDepth;
+                                   char *typeStr = getLLVMType(&typeNode);
+                                   file.write("%%e%d = getelementptr inbounds nuw %%struct.%d, ptr %%r%d, i32 0, i32 %d\n", reg, strEnt.id, mod->entity->id, memOff);
+                               }break;
         case ASTType::ARRAY_AT:{
                                    ASTArrayAt *at = (ASTArrayAt*)root;
                                    u32 atReg = lowerExpression(at->at, file);
@@ -522,15 +538,36 @@ void lowerASTNode(ASTBase *node, LLVMFile &file){
                                      ASTAssDecl *decl = (ASTAssDecl*)node;
                                      ASTVariable **vars = (ASTVariable**)decl->lhs;
                                      if(decl->lhsCount == 1){
-                                         ASTVariable *var = vars[0];
                                          ASTTypeNode typeNode;
-                                         typeNode.zType = var->entity->type;
-                                         typeNode.pointerDepth = var->entity->pointerDepth;
-                                         u32 expReg = lowerExpression(decl->rhs, file, typeNode.zType);
-                                         u32 tempReg = file.newReg();
-                                         char *typeStr = getLLVMType(&typeNode);
-                                         file.write("%%t%d = load %s, ptr %%e%d\n", tempReg, typeStr, expReg);
-                                         file.write("store %s %%t%d, ptr %%r%d\n", typeStr, tempReg, var->entity->id);
+                                         if(vars[0]->type == ASTType::VARIABLE){
+                                             ASTVariable *var = vars[0];
+                                             typeNode.zType = var->entity->type;
+                                             typeNode.pointerDepth = var->entity->pointerDepth;
+                                             u32 expReg = lowerExpression(decl->rhs, file, typeNode.zType);
+                                             u32 tempReg = file.newReg();
+                                             char *typeStr = getLLVMType(&typeNode);
+                                             file.write("%%t%d = load %s, ptr %%e%d\n", tempReg, typeStr, expReg);
+                                             file.write("store %s %%t%d, ptr %%r%d\n", typeStr, tempReg, var->entity->id);
+                                         }else{
+                                             ASTModifier *mod = (ASTModifier*)decl->lhs[0];
+                                             //TODO: maybe not?
+                                             ASTVariable *var = (ASTVariable*)mod->child;
+                                             u32 structOff = (u32)mod->entity->type - (u32)Type::Z_TYPE_END - 1;
+                                             StructEntity &strEnt = check::structEntities[structOff];
+                                             Scope *structScope = strEnt.body;
+                                             u32 memOff;
+                                             structScope->var.getValue(var->name, &memOff);
+                                             VariableEntity *varEntity = structScope->vars[memOff];
+                                             typeNode.zType = varEntity->type;
+                                             typeNode.pointerDepth = varEntity->pointerDepth;
+                                             u32 expReg = lowerExpression(decl->rhs, file, typeNode.zType);
+                                             u32 tempReg = file.newReg();
+                                             char *typeStr = getLLVMType(&typeNode);
+                                             u32 memReg = file.newReg();
+                                             file.write("%%t%d = getelementptr inbounds nuw %%struct.%d, ptr %%r%d, i32 0, i32 %d\n", memReg, strEnt.id, mod->entity->id, memOff);
+                                             file.write("%%t%d = load %s, ptr %%e%d\n", tempReg, typeStr, expReg);
+                                             file.write("store %s %%t%d, ptr %%t%d\n", typeStr, tempReg, memReg);
+                                         };
                                      }else{
                                          u32 expReg = lowerExpression(decl->rhs, file);
                                          for(u32 x=0; x<decl->lhsCount; x++){

@@ -141,7 +141,7 @@ bool fillTypeInfo(Lexer &lexer, ASTTypeNode *node){
     node->zType = (Type)(off + (u32)Type::Z_TYPE_END + 1);
     return true;
 };
-Type checkModifierChain(Lexer &lexer, ASTBase *root, VariableEntity *entity){
+Type checkModifierChain(Lexer &lexer, ASTBase *root, VariableEntity *entity, u32 &memPd){
     BRING_TOKENS_TO_SCOPE;
     Type structType = entity->type;
     StructEntity *structEntity = getStructEntity(structType);
@@ -155,7 +155,7 @@ Type checkModifierChain(Lexer &lexer, ASTBase *root, VariableEntity *entity){
                                            lexer.emitErr(mod->tokenOff, "%.*s does not belong to the defined structure", mod->name.len, mod->name.mem);
                                            return Type::INVALID;
                                        }
-                                       return checkModifierChain(lexer, mod->child, structBodyScope->vars[off]);
+                                       return checkModifierChain(lexer, mod->child, structBodyScope->vars[off], memPd);
                                    }break;
                                    //TODO: array_at
             case ASTType::VARIABLE:{
@@ -165,6 +165,7 @@ Type checkModifierChain(Lexer &lexer, ASTBase *root, VariableEntity *entity){
                                            lexer.emitErr(var->tokenOff, "%.*s does not belong to the defined structure", var->name.len, var->name.mem);
                                            return Type::INVALID;
                                        };
+                                       memPd = structBodyScope->vars[off]->pointerDepth;
                                        return structBodyScope->vars[off]->type;
                                    }break;
         };
@@ -397,7 +398,7 @@ Type _checkTree(Lexer &lexer, ASTBase **nnode, DynamicArray<Scope*> &scopes, u32
                                        return Type::INVALID;
                                    };
                                    mod->entity = entity;
-                                   type = checkModifierChain(lexer, mod->child, entity);
+                                   type = checkModifierChain(lexer, mod->child, entity, pointerDepth);
                                }break;
         default:{
                     // @type: type clamp down 1
@@ -533,10 +534,16 @@ u64 checkDecl(ASTAssDecl *assdecl, DynamicArray<Scope*> &scopes, Lexer &lexer, b
         };
         Scope *scope = scopes[scopes.count-1];
         VariableEntity *entity = (VariableEntity*)mem::alloc(sizeof(VariableEntity));
-        ASTVariable *var = (ASTVariable*)lhsNode;
-        scope->var.insertValue(var->name, scope->vars.count);
+        if(lhsNode->type == ASTType::VARIABLE){
+            ASTVariable *var = (ASTVariable*)lhsNode;
+            scope->var.insertValue(var->name, scope->vars.count);
+            var->entity = entity;
+        }else{
+            ASTModifier *mod = (ASTModifier*)lhsNode;
+            scope->var.insertValue(mod->name, scope->vars.count);
+            mod->entity = entity;
+        }
         scope->vars.push(entity);
-        var->entity = entity;
         if(pentity == nullptr){
             entity->pointerDepth = typePointerDepth;
             entity->type = convertFromComptype(typeType);
@@ -562,6 +569,8 @@ bool checkAss(ASTAssDecl *assdecl, DynamicArray<Scope*> &scopes, Lexer &lexer){
     entities.init();
     DEFER(entities.uninit());
     bool isGlobal;
+    Type memType = Type::INVALID;
+    u32 memPd;
     for(u32 x=0; x<assdecl->lhsCount; x++){
         ASTBase *node = assdecl->lhs[x];
         VariableEntity *entity = getVariableEntity(node, scopes, isGlobal);
@@ -572,15 +581,19 @@ bool checkAss(ASTAssDecl *assdecl, DynamicArray<Scope*> &scopes, Lexer &lexer){
             };
             ASTVariable *var = (ASTVariable*)node;
             var->entity = entity;
-            entities.push(entity);
         };
         if(node->type == ASTType::MODIFIER){
             ASTModifier *mod = (ASTModifier*)node;
-            if(checkModifierChain(lexer, mod->child, entity) == Type::INVALID) return false;
+            mod->entity = entity;
+            Type mem = checkModifierChain(lexer, mod->child, entity, memPd);
+            if(mem == Type::INVALID) return false;
+            if(memType == Type::INVALID) memType = mem;
         };
+        entities.push(entity);
     };
     u32 treePointerDepth;
-    Type treeType = checkTree(lexer, &assdecl->rhs, scopes, treePointerDepth, entities[0]->type, entities[0]->pointerDepth);
+    Type treeType = checkTree(lexer, &assdecl->rhs, scopes, treePointerDepth,
+            memType==Type::INVALID?entities[0]->type:memType, memType==Type::INVALID?entities[0]->pointerDepth:memPd);
     if(treeType == Type::INVALID) return false;
     if(assdecl->lhsCount > 1){
         ASTProcCall *procCall = (ASTProcCall*)assdecl->rhs;
@@ -758,6 +771,7 @@ bool checkStructDef(ASTStruct *Struct, DynamicArray<Scope*> &scopes, Lexer &lexe
     StructEntity *entity = &check::structEntities.newElem();
     Scope *body = check::newStructScope();
     entity->body = body;
+    entity->id = id;
     u64 size = 0;
     scopes.push(body);
     for(u32 x=0; x<Struct->bodyCount; x++){

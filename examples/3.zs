@@ -7,4 +7,6 @@ foo :: struct{
 
 main :: proc(){
     f: foo
+    f.y = 3
+    printf("%d\n", f.y)
 }

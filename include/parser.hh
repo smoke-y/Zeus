@@ -138,6 +138,7 @@ struct ASTProcDefDecl : ASTBase{
 struct ASTStruct : ASTBase{
     String name;
     ASTBase **body;
+    u32 id;
     u32 bodyCount;
 };
 struct ASTVariable : ASTBase{

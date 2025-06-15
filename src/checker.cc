@@ -25,8 +25,8 @@ namespace check{
     DynamicArray<Scope*> blockScopes;
     HashmapStr stringToId;
     DynamicArray<ASTInitializerList*> initializerLists;
+    DynamicArray<StructEntity> structEntities;
     static HashmapStr structToOff;
-    static DynamicArray<StructEntity> structEntities;
     static ASTReturn defaultReturn;
     static HashmapStr loopLabels;
 
@@ -752,7 +752,9 @@ bool checkStructDef(ASTStruct *Struct, DynamicArray<Scope*> &scopes, Lexer &lexe
         lexer.emitErr(Struct->tokenOff, "Structure already defined");
         return false;
     };
-    check::structToOff.insertValue(Struct->name, check::structEntities.count);
+    u32 id = check::structEntities.count;
+    check::structToOff.insertValue(Struct->name, id);
+    Struct->id = id;
     StructEntity *entity = &check::structEntities.newElem();
     Scope *body = check::newStructScope();
     entity->body = body;

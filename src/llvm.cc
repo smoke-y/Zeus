@@ -61,6 +61,7 @@ namespace llvm{
         "lt",
         "le",
     };
+    static char typeBuff[100];
     static s32 curIfElseExitLabel = -1;
     static s32 curForExitLabel = -1;
     static s32 curForEntryLabel = -1;
@@ -126,7 +127,9 @@ struct LLVMFile{
 
 char *getLLVMType(ASTTypeNode *node){
     if(node->zType == Type::COMP_STRING || node->pointerDepth) return "ptr";
-    return llvm::TypeToStringTable[(u32)node->zType];
+    if(node->zType < Type::Z_TYPE_END) return llvm::TypeToStringTable[(u32)node->zType];
+    sprintf(llvm::typeBuff, "%%struct.%d", (u32)node->zType - (u32)Type::Z_TYPE_END - 1);
+    return llvm::typeBuff;
 }
 u32 getLLVMSize(ASTTypeNode *node){
     if(node->zType == Type::COMP_STRING || node->pointerDepth) return 8;
@@ -709,6 +712,27 @@ GLOBAL_WRITE_LLVM_TO_BUFF:
         cursor += temp;
     };
     if(cursor) WRITE(file, buff, cursor);
+    for(u32 x=0; x<check::structEntities.count; x++){
+        cursor = 0;
+        temp = snprintf(buff, BUFF_SIZE, "%%struct.%d = type{", x);
+        cursor += temp;
+        StructEntity &entity = check::structEntities[x];
+        for(u32 i=0; i<entity.body->vars.count; i++){
+            VariableEntity *varEnt = entity.body->vars[i];
+            ASTTypeNode typeNode;
+            typeNode.zType = varEnt->type;
+            typeNode.pointerDepth = varEnt->pointerDepth;
+            char *typeStr = getLLVMType(&typeNode);
+            temp = snprintf(buff+cursor, BUFF_SIZE-cursor, "%s", typeStr);
+            cursor += temp;
+            if(i+1 == entity.body->vars.count) break;
+            temp = snprintf(buff+cursor, BUFF_SIZE-cursor, ", ");
+            cursor += temp;
+        };
+        temp = snprintf(buff+cursor, BUFF_SIZE-cursor, "}\n");
+        cursor += temp;
+        WRITE(file, buff, cursor);
+    };
     cursor = 0;
     for(u32 x=0; x<check::initializerLists.count; x++){
         ASTInitializerList *il = check::initializerLists[x];

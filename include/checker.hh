@@ -52,4 +52,5 @@ namespace check{
     extern Scope *globalScopes;
     extern HashmapStr stringToId;
     extern DynamicArray<ASTInitializerList*> initializerLists;
+    extern DynamicArray<StructEntity> structEntities;
 };

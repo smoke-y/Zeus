@@ -6,6 +6,7 @@
 enum class Type{
     INVALID,
     DEFER_CAST,
+    DEFER_FILL,
     COMP_STRING,
     COMP_INTEGER,
     COMP_DECIMAL,

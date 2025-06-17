@@ -20,6 +20,7 @@ namespace llvm{
     char* TypeToStringTable[] = {
         "invalid",
         "invalid_defer_cast",
+        "invalid_defer_fill",
         "invalid_comp_string",
         "i64",
         "double",
@@ -410,6 +411,19 @@ void lowerASTNode(ASTBase *node, LLVMFile &file);
 inline void lowerBody(ASTBase **nodes, u32 count, LLVMFile &file){
     for(u32 x=0; x<count; x++) lowerASTNode(nodes[x], file);
 }
+void lowerFill(u32 reg, Type type, ASTUnOp *fill, LLVMFile &file){
+    ASTString *str = (ASTString*)fill->child;
+    u32 len = str->str.len;
+    u32 strId =  (u32)type - (u32)Type::Z_TYPE_END - 1;
+    u32 memReg = file.newReg();
+    u32 lenReg = file.newReg();
+    u32 strReg;
+    check::stringToId.getValue(str->str, &strReg);
+    file.write("%%t%d = getelementptr inbounds nuw %%struct.%d, ptr %%r%d, i32 0, i32 0\n", memReg, strId, reg);
+    file.write("store ptr @.str.%d, ptr %%t%d\n", strReg, memReg);
+    file.write("%%t%d = getelementptr inbounds nuw %%struct.%d, ptr %%r%d, i32 0, i32 1\n", lenReg, strId, reg);
+    file.write("store i32 %d, ptr %%t%d\n", str->str.len, lenReg);
+};
 void lowerASTNode(ASTBase *node, LLVMFile &file){
     switch(node->type){
         case ASTType::RETURN:{
@@ -525,6 +539,22 @@ void lowerASTNode(ASTBase *node, LLVMFile &file){
         case ASTType::DECLERATION:{
                                       ASTAssDecl *decl = (ASTAssDecl*)node;
                                       ASTVariable **vars = (ASTVariable**)decl->lhs;
+                                      if(decl->rhs == nullptr){
+                                          ASTVariable *var = vars[0];
+                                          ASTTypeNode typeNode;
+                                          typeNode.zType = var->entity->type;
+                                          typeNode.pointerDepth = var->entity->pointerDepth;
+                                          u32 id = var->entity->id;
+                                          char *typeStr = getLLVMType(&typeNode);
+                                          file.write("%%r%d = alloca %s\n", id, typeStr);
+                                          return;
+                                      };
+                                      if(decl->rhs->type == ASTType::U_FILL){
+                                          u32 id = vars[0]->entity->id;
+                                          file.write("%%r%d = alloca %%struct.%d\n", id, (u32)decl->zType->zType - (u32)Type::Z_TYPE_END - 1);
+                                          lowerFill(id, decl->zType->zType, (ASTUnOp*)decl->rhs, file);
+                                          break;
+                                      };
                                       if(decl->lhsCount == 1){
                                           ASTVariable *var = vars[0];
                                           ASTTypeNode typeNode;
@@ -553,6 +583,11 @@ void lowerASTNode(ASTBase *node, LLVMFile &file){
         case ASTType::ASSIGNMENT:{
                                      ASTAssDecl *decl = (ASTAssDecl*)node;
                                      ASTVariable **vars = (ASTVariable**)decl->lhs;
+                                     if(decl->rhs->type == ASTType::U_FILL){
+                                         u32 id = vars[0]->entity->id;
+                                         lowerFill(id, decl->zType->zType, (ASTUnOp*)decl->rhs, file);
+                                         break;
+                                     };
                                      if(decl->lhsCount == 1){
                                          ASTTypeNode typeNode;
                                          if(vars[0]->type == ASTType::VARIABLE){

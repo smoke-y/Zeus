@@ -1,3 +1,4 @@
+#import "lib/str.zs"
 #import "lib/io.zs"
 
 foo :: struct{
@@ -15,11 +16,14 @@ main :: proc(){
     y := 0.1
     printf("%f\n", x+y)
 
-    z: u32  = 65 //'A'
+    z: u32  = 65 
     f.z = $ &z
 
     mainProcPtr := #proc_ptr main
     v := f.z
 
     printf("%p\n%c\n", mainProcPtr, v[0])
+
+    str:String = #fill "Hello, World"
+    printf("%.*s", str.len, str.mem)
 }

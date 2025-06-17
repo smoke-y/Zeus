@@ -258,6 +258,9 @@ ASTBase* _genASTExprTree(Lexer &lexer, ASTFile &file, u32 &xArg, u8 &bracketArg,
         case TokType::P_PROC_PTR:
             unaryType = ASTType::U_PROC_MEM;
             break;
+        case TokType::P_FILL:
+            unaryType = ASTType::U_FILL;
+            break;
     };
     if(unaryType != ASTType::INVALID){
         unOp = (ASTUnOp*)file.newNode(sizeof(ASTUnOp), unaryType, x++);
@@ -330,6 +333,16 @@ ASTBase* _genASTExprTree(Lexer &lexer, ASTFile &file, u32 &xArg, u8 &bracketArg,
                                          if(!lhs) return nullptr;
                                      }
                                  }break;
+        case TokType::DOUBLE_QUOTES:{
+                                        ASTString *str = (ASTString*)file.newNode(sizeof(ASTString), ASTType::STRING, x);
+                                        str->str = makeStringFromTokOff(x, lexer);
+                                        lhs = str;
+                                    }break;
+        case TokType::SINGLE_QUOTES:{
+                                        ASTNum *character = (ASTNum*)file.newNode(sizeof(ASTNum), ASTType::CHARACTER, x);
+                                        character->character = (char)lexer.fileContent[tokOffs[x].off];
+                                        lhs = character;
+                                    }break;
         default:{
                     lexer.emitErr(x, "Invalid operand");
                     return nullptr;
@@ -453,18 +466,6 @@ ASTBase* genASTExprTree(Lexer &lexer, ASTFile &file, u32 &xArg, u32 end){
                               list->elementCount = elements.count;
                               return list;
                           }break;
-        case TokType::DOUBLE_QUOTES:{
-                                        ASTString *str = (ASTString*)file.newNode(sizeof(ASTString), ASTType::STRING, xArg);
-                                        str->str = makeStringFromTokOff(xArg, lexer);
-                                        xArg++;
-                                        return str;
-                                    }break;
-        case TokType::SINGLE_QUOTES:{
-                                        ASTNum *character = (ASTNum*)file.newNode(sizeof(ASTNum), ASTType::CHARACTER, xArg);
-                                        character->character = (char)lexer.fileContent[tokOffs[xArg].off];
-                                        xArg++;
-                                        return character;
-                                    }break;
     };
     ASTBase *tree = _genASTExprTree(lexer, file, xArg, bracket, end);
     if(bracket != 0){

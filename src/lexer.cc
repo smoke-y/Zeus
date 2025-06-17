@@ -37,6 +37,7 @@ namespace Word{
         {"import", TokType::P_IMPORT},
         {"link", TokType::P_LINK},
         {"proc_ptr", TokType::P_PROC_PTR},
+        {"fill", TokType::P_FILL},
     };
     HashmapStr keywords;
     HashmapStr poundwords;

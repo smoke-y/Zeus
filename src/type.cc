@@ -3,6 +3,7 @@
 char* typeToStrTable[] = {
     "invalid",
     "defer_cast",
+    "defer_fill",
     "comp_string",
     "comp_integer",
     "comp_decimal",

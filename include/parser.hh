@@ -51,6 +51,7 @@ enum class ASTType{
     U_NEG,
     U_MEM,
     U_PROC_MEM,
+    U_FILL,
     U_END,    //unary operators end
 };
 

@@ -227,12 +227,36 @@ Type checkTree(Lexer &lexer, ASTBase **nnode, DynamicArray<Scope*> &scopes, u32 
         treeType = _checkTree(lexer, nnode, scopes, pointerDepth);
         if(treeType == Type::INVALID) return Type::INVALID;
     };
-    if(typeCheck == Type::INVALID) return treeType;
     ASTCast *cast = nullptr;
-    if(treeType == Type::DEFER_CAST){
-        cast = (ASTCast*)node;
-        if(canWeCast(cast->srcType.zType, cast->srcType.pointerDepth, typeCheck, typeCheckPd, node->tokenOff, lexer) == false) return Type::INVALID;
-    }
+    switch(treeType){
+        case Type::DEFER_CAST:{
+                                  cast = (ASTCast*)node;
+                                  if(canWeCast(cast->srcType.zType, cast->srcType.pointerDepth, typeCheck, typeCheckPd, node->tokenOff, lexer) == false) return Type::INVALID;
+                              }break;
+        case Type::DEFER_FILL:{
+                                  ASTUnOp *unop = (ASTUnOp*)node;
+                                  if(unop->child->type == ASTType::STRING){
+                                      String str;
+                                      str.mem = "String";
+                                      str.len = strlen("String");
+                                      StructEntity *strEnt = getStructEntity(str);
+                                      if(typeCheck == Type::INVALID){
+                                          lexer.emitErr(unop->tokenOff, "Have to declare type when using #fill");
+                                          return Type::INVALID;
+                                      };
+                                      if(strEnt->id != (u32)typeCheck - (u32)Type::Z_TYPE_END - 1){
+                                          lexer.emitErr(unop->tokenOff, "Can only perform #fill compile_time_string on the struct 'String'");
+                                          return Type::INVALID;
+                                      };
+                                      if(typeCheckPd != 0){
+                                          lexer.emitErr(unop->tokenOff, "Can only perform #fill compile_time_string on variables who are not pointers");
+                                          return Type::INVALID;
+                                      };
+                                      treeType = typeCheck;
+                                  };
+                              }break;
+    };
+    if(typeCheck == Type::INVALID) return treeType;
     if(cast == nullptr){
         if(canWeCast(treeType, pointerDepth, typeCheck, typeCheckPd, node->tokenOff, lexer) == false) return Type::INVALID;
         if(implicitOk(treeType, typeCheck)){
@@ -261,20 +285,34 @@ Type _checkTree(Lexer &lexer, ASTBase **nnode, DynamicArray<Scope*> &scopes, u32
     ASTBase *node = *nnode;
     ASTUnOp *rootUnop = nullptr;
     if(node->type > ASTType::U_START && node->type < ASTType::U_END) rootUnop = (ASTUnOp*)node;
-    if(node->type == ASTType::U_PROC_MEM){
-        if(rootUnop->child->type != ASTType::VARIABLE){
-            lexer.emitErr(rootUnop->tokenOff, "Child has to be a procedure name");
-            return Type::INVALID;
-        };
-        ASTVariable *proc = (ASTVariable*)rootUnop->child;
-        ProcEntity *entity = getProcEntity(proc->name,scopes);
-        proc->entity = (VariableEntity*)entity;
-        if(entity == nullptr){
-            lexer.emitErr(proc->tokenOff, "Procedure not defined/declared");
-            return Type::INVALID;
-        };
-        return Type::PTR;
-    };
+    switch(node->type){
+        case ASTType::U_PROC_MEM:{
+                                     if(rootUnop->child->type != ASTType::VARIABLE){
+                                         lexer.emitErr(rootUnop->tokenOff, "Child has to be a procedure name");
+                                         return Type::INVALID;
+                                     };
+                                     ASTVariable *proc = (ASTVariable*)rootUnop->child;
+                                     ProcEntity *entity = getProcEntity(proc->name,scopes);
+                                     proc->entity = (VariableEntity*)entity;
+                                     if(entity == nullptr){
+                                         lexer.emitErr(proc->tokenOff, "Procedure not defined/declared");
+                                         return Type::INVALID;
+                                     };
+                                     return Type::PTR;
+                                 }break;
+        case ASTType::U_FILL:{
+                                     if(rootUnop->child->type != ASTType::STRING){
+                                         lexer.emitErr(rootUnop->tokenOff, "Child has to be a compile time string");
+                                         return Type::INVALID;
+                                     };
+                                     u32 off;
+                                     ASTString *str = (ASTString*)rootUnop->child;
+                                     if(!check::stringToId.getValue(str->str, &off)){
+                                         check::stringToId.insertValue(str->str, check::stringToId.count);
+                                     };
+                                     return Type::DEFER_FILL;
+                                 }break;
+    }
     while(node->type > ASTType::U_START && node->type < ASTType::U_END){
         //unary ops return the type of the child
         ASTUnOp *unOp = (ASTUnOp*)node;

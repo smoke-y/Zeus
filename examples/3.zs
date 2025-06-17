@@ -16,7 +16,7 @@ main :: proc(){
     y := 0.1
     printf("%f\n", x+y)
 
-    z: u32  = 65 
+    z: u32  = 65  //A
     f.z = $ &z
 
     mainProcPtr := #proc_ptr main

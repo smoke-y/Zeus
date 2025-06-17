@@ -230,7 +230,6 @@ CHECK_NUM_DEC:
                              tokenOffsets.push(offset);
                              tokenTypes.push(numType);
                          } else {
-
                              offset.off = x;
                              TokType type = (TokType)src[x];
                              if(src[x] == '.' && src[x+1] == '.'){
@@ -241,6 +240,10 @@ CHECK_NUM_DEC:
                                      x++;
                                  };
                              }else if (src[x] == '/' && src[x + 1] == '/') {
+                                 tokenTypes.push((TokType)'\n');
+                                 offset.off = x;
+                                 offset.len = 1;
+                                 tokenOffsets.push(offset);
 #if(SIMD)
                                  x += 2;
                                  //Since the src buffer is padded we do not have to worry
@@ -272,6 +275,11 @@ CHECK_NUM_DEC:
                                  x = eatUnwantedChars(src, x);
                                  continue;
                              } else if (src[x] == '/' && src[x+1] == '*') {
+                                 tokenTypes.push((TokType)'\n');
+                                 offset.off = x;
+                                 offset.len = 1;
+                                 tokenOffsets.push(offset);
+
                                  u8 level = 1;
                                  u32 beg = x;
                                  x += 3;

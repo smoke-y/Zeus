@@ -261,6 +261,20 @@ Type _checkTree(Lexer &lexer, ASTBase **nnode, DynamicArray<Scope*> &scopes, u32
     ASTBase *node = *nnode;
     ASTUnOp *rootUnop = nullptr;
     if(node->type > ASTType::U_START && node->type < ASTType::U_END) rootUnop = (ASTUnOp*)node;
+    if(node->type == ASTType::U_PROC_MEM){
+        if(rootUnop->child->type != ASTType::VARIABLE){
+            lexer.emitErr(rootUnop->tokenOff, "Child has to be a procedure name");
+            return Type::INVALID;
+        };
+        ASTVariable *proc = (ASTVariable*)rootUnop->child;
+        ProcEntity *entity = getProcEntity(proc->name,scopes);
+        proc->entity = (VariableEntity*)entity;
+        if(entity == nullptr){
+            lexer.emitErr(proc->tokenOff, "Procedure not defined/declared");
+            return Type::INVALID;
+        };
+        return Type::PTR;
+    };
     while(node->type > ASTType::U_START && node->type < ASTType::U_END){
         //unary ops return the type of the child
         ASTUnOp *unOp = (ASTUnOp*)node;
@@ -442,6 +456,10 @@ Type _checkTree(Lexer &lexer, ASTBase **nnode, DynamicArray<Scope*> &scopes, u32
                         else if(isCompType(lhsType)) type = rhsType;
                         else if(isCompType(rhsType)) type = lhsType;
                         else type = (lhsType <= rhsType)?lhsType:rhsType;
+                        if(isDecimal(type) && binOp->type == ASTType::B_MOD){
+                            lexer.emitErr(binOp->tokenOff, "Cannot mod(%) with floats");
+                            return Type::INVALID;
+                        }
                         pointerDepth = (lhsUsingPointer < rhsUsingPointer)?rhsUsingPointer:lhsUsingPointer;
                         binOp->zType.zType = type;
                         binOp->zType.pointerDepth = pointerDepth;

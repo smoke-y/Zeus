@@ -1,9 +1,10 @@
-#include "../include/basic.hh"
 #include "../include/ds.hpp"
+#include "../include/basic.hh"
 #include "../include/parser.hh"
 #include "../include/checker.hh"
 #include "../include/dependency.hh"
 #include <cstdio>
+#include <cstring>
 #include <stdarg.h>
 
 #define BUCKET_BUFFER_SIZE 1023
@@ -181,6 +182,11 @@ s32 howCast(ASTTypeNode *n1, ASTTypeNode *n2){
 u32 lowerExpression(ASTBase *root, LLVMFile &file, Type type = Type::INVALID);
 void lowerUnop(u32 reg, ASTUnOp *unop, LLVMFile &file){
     switch(unop->type){
+        case ASTType::U_PROC_MEM:{
+                                     ASTVariable *var = (ASTVariable*)unop->child;
+                                     file.write("%%e%d = alloca ptr\n", reg);
+                                     file.write("store ptr @%.*s, ptr %%e%d\n", var->name.len, var->name.mem, reg);
+                                 }break;
         case ASTType::U_MEM:{
                                 u32 childReg = lowerExpression(unop->child, file);
                                 unop->childType.pointerDepth -= 1;
@@ -193,6 +199,7 @@ void lowerUnop(u32 reg, ASTUnOp *unop, LLVMFile &file){
 u32 lowerExpression(ASTBase *root, LLVMFile &file, Type type){
     u32 reg = file.newReg();
     switch(root->type){
+        case ASTType::U_PROC_MEM:
         case ASTType::U_MEM:{
                                 lowerUnop(reg, (ASTUnOp*)root, file);
                             }break;
@@ -301,6 +308,14 @@ u32 lowerExpression(ASTBase *root, LLVMFile &file, Type type){
                                  bool x = check::stringToId.getValue(str->str, &id);
                                  file.write("%%e%d = bitcast ptr @str.%d to ptr\n", reg, id);
                              }break;
+        case ASTType::DECIMAL:{
+                                  ASTNum *num = (ASTNum*)root;
+                                  char *typeStr = "double";
+                                  if(type != Type::INVALID) typeStr = llvm::TypeToStringTable[(u32)type];
+                                  u64 bits;
+                                  memcpy(&bits, &num->decimal, sizeof(bits));
+                                  file.write("%%e%d = alloca %s\nstore %s 0x%016llX, ptr %%e%d\n", reg, typeStr, typeStr, bits, reg);
+                              }break;
         case ASTType::INTEGER:{
                                   ASTNum *num = (ASTNum*)root;
                                   char *typeStr = "i64";
@@ -368,6 +383,7 @@ u32 lowerExpression(ASTBase *root, LLVMFile &file, Type type){
                         if(root->type == ASTType::B_DIV
                                 || root->type == ASTType::B_DIV
                                 || (root->type >= ASTType::B_GRT && root->type <= ASTType::B_LEQU)) sign = isSigned(binOp->zType.zType)?'s':'u';
+                        if(isDecimal(binOp->zType.zType)) sign = 'f';
                         if(root->type >= ASTType::B_EQU && root->type <= ASTType::B_LEQU) isCmp = "icmp";
                         file.write("%%t%d = load %s, ptr %%e%d\n", ltmp, typeStr, lreg);
                         file.write("%%t%d = load %s, ptr %%e%d\n", rtmp, typeStr, rreg);

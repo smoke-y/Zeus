@@ -50,6 +50,7 @@ enum class ASTType{
     U_NOT,
     U_NEG,
     U_MEM,
+    U_PROC_MEM,
     U_END,    //unary operators end
 };
 

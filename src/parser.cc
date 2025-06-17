@@ -255,6 +255,9 @@ ASTBase* _genASTExprTree(Lexer &lexer, ASTFile &file, u32 &xArg, u8 &bracketArg,
         case (TokType)'&':
             unaryType = ASTType::U_MEM;
             break;
+        case TokType::P_PROC_PTR:
+            unaryType = ASTType::U_PROC_MEM;
+            break;
     };
     if(unaryType != ASTType::INVALID){
         unOp = (ASTUnOp*)file.newNode(sizeof(ASTUnOp), unaryType, x++);

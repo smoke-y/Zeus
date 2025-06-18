@@ -998,7 +998,7 @@ namespace dbg{
                                    ASTCast *cast = (ASTCast*)node;
                                    dumpASTNode(cast->child, lexer, padding+1);
                                }break;
-            case ASTType::U_MEM: printf("u_not"); hasNotDumped = false;
+            case ASTType::U_MEM: printf("u_mem"); hasNotDumped = false;
             case ASTType::U_NEG: if(hasNotDumped){printf("u_neg"); hasNotDumped = false;};
             case ASTType::U_NOT:{
                                     if(hasNotDumped) printf("u_not");

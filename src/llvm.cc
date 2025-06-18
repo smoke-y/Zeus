@@ -218,7 +218,18 @@ u32 lowerExpression(ASTBase *root, LLVMFile &file, Type type){
                                    typeNode.zType = varEntity->type;
                                    typeNode.pointerDepth = varEntity->pointerDepth;
                                    char *typeStr = getLLVMType(&typeNode);
-                                   file.write("%%e%d = getelementptr inbounds nuw %%struct.%d, ptr %%r%d, i32 0, i32 %d\n", reg, strEnt.id, mod->entity->id, memOff);
+                                   if(mod->pAccessDepth == 0){
+                                       file.write("%%e%d = getelementptr inbounds nuw %%struct.%d, ptr %%r%d, i32 0, i32 %d\n", reg, strEnt.id, mod->entity->id, memOff);
+                                   }else{
+                                       u32 tempReg;
+                                       u32 oldReg = mod->entity->id;
+                                       for(u32 x=0; x<mod->pAccessDepth; x++){
+                                           tempReg = file.newReg();
+                                           file.write("%%t%d = load ptr, ptr %%r%d\n", tempReg, oldReg);
+                                           oldReg = tempReg;
+                                       };
+                                       file.write("%%e%d = getelementptr inbounds nuw %%struct.%d, ptr %%t%d, i32 0, i32 %d\n", reg, strEnt.id, tempReg, memOff);
+                                   };
                                }break;
         case ASTType::ARRAY_AT:{
                                    ASTArrayAt *at = (ASTArrayAt*)root;
@@ -615,7 +626,18 @@ void lowerASTNode(ASTBase *node, LLVMFile &file){
                                              u32 tempReg = file.newReg();
                                              char *typeStr = getLLVMType(&typeNode);
                                              u32 memReg = file.newReg();
-                                             file.write("%%t%d = getelementptr inbounds nuw %%struct.%d, ptr %%r%d, i32 0, i32 %d\n", memReg, strEnt.id, mod->entity->id, memOff);
+                                             if(mod->pAccessDepth == 0){
+                                                 file.write("%%t%d = getelementptr inbounds nuw %%struct.%d, ptr %%r%d, i32 0, i32 %d\n", memReg, strEnt.id, mod->entity->id, memOff);
+                                             }else{
+                                                 u32 tempReg;
+                                                 u32 oldReg = mod->entity->id;
+                                                 for(u32 x=0; x<mod->pAccessDepth; x++){
+                                                     tempReg = file.newReg();
+                                                     file.write("%%t%d = load ptr, ptr %%r%d\n", tempReg, oldReg);
+                                                     oldReg = tempReg;
+                                                 };
+                                                 file.write("%%t%d = getelementptr inbounds nuw %%struct.%d, ptr %%t%d, i32 0, i32 %d\n", memReg, strEnt.id, tempReg, memOff);
+                                             }
                                              file.write("%%t%d = load %s, ptr %%e%d\n", tempReg, typeStr, expReg);
                                              file.write("store %s %%t%d, ptr %%t%d\n", typeStr, tempReg, memReg);
                                          };

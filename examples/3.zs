@@ -7,6 +7,11 @@ foo :: struct{
     z: ^char
 }
 
+trial :: proc(f: ^foo){
+    f@x = 3
+    printf("f@x: %d\n", f@x)
+}
+
 main :: proc(){
     f: foo
     f.y = 3
@@ -25,5 +30,8 @@ main :: proc(){
     printf("%p\n%c\n", mainProcPtr, v[0])
 
     str:String = #fill "Hello, World"
-    printf("%.*s", str.len, str.mem)
+    printf("%.*s\n", str.len, str.mem)
+
+    trial(&f)
+    printf("f.x: %d\n", f.x)
 }

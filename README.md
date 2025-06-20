@@ -1,30 +1,30 @@
-# Zeus
+<img src="logo.jpeg">
 
-Compiler for Zeus lang
+# The Zeus Programming Language
 
 ```
-foo :: struct{
-    x: s32
-    y: u64
+swap :: proc(x,y :u32) -> (u32, u32){
+    return y, x
 }
 
-bar :: proc() -> (u32, s64){
-    return (1,2)
-}
+#link "libc"
+
+printf :: proc_decl(^char, ...)
 
 main :: proc(){
-    for x:=0...69..2{
-        y := 234
-    }
-    if 2+3{
-        y := 234
-        v := y[239]
+    printf("Hello, World")
+    defer printf("Bye, World!")
+
+    for "outer-loop" g:=0...3{
+        x := 0
+        for {
+            printf("%d %d\n", g, x)
+                if x == 3{
+                    g = g + 1
+                    continue "outer-loop"
+                }
+            x = x + 1
+        }
     }
 }
 ```
-
-## FEATURES
-* no header files
-* multiple return values
-* defer statement
-* mordern syntax with informative error reporting

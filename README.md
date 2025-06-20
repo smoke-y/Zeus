@@ -1,6 +1,6 @@
-<img src="logo.jpeg">
-
 # The Zeus Programming Language
+
+<img src="logo.jpeg">
 
 ```
 swap :: proc(x,y :u32) -> (u32, u32){
@@ -28,3 +28,5 @@ main :: proc(){
     }
 }
 ```
+
+read about it: http://smoke-y.github.io/articles/zeus.html

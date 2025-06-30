@@ -328,6 +328,21 @@ ASTBase* _genASTExprTree(Lexer &lexer, ASTFile &file, u32 &xArg, u8 &bracketArg,
                                          pcall->args = argNodes;
                                          args.uninit();
                                          lhs = pcall;
+                                     }else if(tokTypes[x+1] == (TokType)':'){
+                                         x += 2;
+                                         if(tokTypes[x] != (TokType)':'){
+                                             lexer.emitErr(x, "Expected ':'");
+                                             return nullptr;
+                                         };
+                                         ASTEnumAt *at = (ASTEnumAt*)file.newNode(sizeof(ASTEnumAt), ASTType::ENUM_AT, x);
+                                         at->parent = makeStringFromTokOff(x-2, lexer);
+                                         x++;
+                                         if(tokTypes[x] != TokType::IDENTIFIER){
+                                             lexer.emitErr(x, "Expected an identifier");
+                                             return nullptr;
+                                         };
+                                         at->elem = makeStringFromTokOff(x, lexer);
+                                         lhs = at;
                                      }else{
                                          lhs = genVariable(lexer, file, x);
                                          if(!lhs) return nullptr;
@@ -661,6 +676,42 @@ ASTIf *parseIfElse(Lexer &lexer, ASTFile &file, u32 &xArg){
     }else If->elseBodyCount = 0;
     return If;
 }
+ASTEnum *parseEnum(Lexer &lexer, ASTFile &file, u32 &xArg){
+    BRING_TOKENS_TO_SCOPE;
+    u32 x = xArg;
+    DEFER(xArg = x);
+    ASTEnum *Enum = (ASTEnum*)file.newNode(sizeof(ASTEnum), ASTType::ENUM, x-3);
+    Enum->name = makeStringFromTokOff(x-3, lexer);
+    x++;
+    if(tokTypes[x] != (TokType)'{'){
+        lexer.emitErr(x, "Expected opening '{'");
+        return nullptr;
+    };
+    x++;
+    Enum->elems.init();
+    x = eatNewLine(tokTypes, x);
+    while(tokTypes[x] != (TokType)'}'){
+        if(tokTypes[x] != TokType::IDENTIFIER){
+            lexer.emitErr(x, "Expected an identifier");
+            return nullptr;
+        };
+        String name = makeStringFromTokOff(x, lexer);
+        u32 val;
+        if(Enum->elems.getValue(name, &val)){
+            lexer.emitErr(x, "Redefinition");
+            return nullptr;
+        };
+        x++;
+        if(tokTypes[x] != (TokType)','){
+            lexer.emitErr(x, "Expected ','");
+            return nullptr;
+        };
+        x = eatNewLine(tokTypes, x+1);
+        Enum->elems.insertValue(name, Enum->elems.count);
+    };
+    x++;
+    return Enum;
+};
 ASTStruct *parseStruct(Lexer &lexer, ASTFile &file, u32 &xArg){
     u32 x = xArg;
     DEFER(xArg = x);
@@ -900,6 +951,11 @@ bool parseBlock(Lexer &lexer, ASTFile &file, DynamicArray<ASTBase*> &table, u32 
                                          //struct (or) proc (or) enum
                                          x += 3;
                                          switch(tokTypes[x]){
+                                             case TokType::K_ENUM:{
+                                                                      ASTEnum *Enum = parseEnum(lexer, file, x);
+                                                                      if(Enum == nullptr) return false;
+                                                                      table.push(Enum);
+                                                                  }break;
                                              case TokType::K_STRUCT:{
                                                                         ASTStruct *Struct = parseStruct(lexer, file, x);
                                                                         if(Struct == nullptr) return false;

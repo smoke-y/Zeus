@@ -34,6 +34,7 @@ enum class TokType {
     K_TYPE_END,    //type end
     K_PROC_DEF,
     K_PROC_DECL,
+    K_ENUM,
     K_IF,
     K_STRUCT,
     K_FOR,

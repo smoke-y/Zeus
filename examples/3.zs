@@ -6,6 +6,11 @@ foo :: struct{
     y: u32
     z: ^char
 }
+days :: enum{
+    MONDAY,
+    SUNDAY,
+    TUESDAY,
+}
 
 trial :: proc(f: ^foo){
     f@x = 3

@@ -2,7 +2,7 @@
 #include "../include/lexer.hh"
 #include "../include/dependency.hh"
 
-static ASTFile *curASTFileForCastNodeAlloc = nullptr;
+static ASTFile *curASTFileForCastAndEnumNodeAlloc = nullptr;
 
 void Scope::init(ScopeType stype, u32 id){
     type = stype;
@@ -26,6 +26,8 @@ namespace check{
     HashmapStr stringToId;
     DynamicArray<ASTInitializerList*> initializerLists;
     DynamicArray<StructEntity> structEntities;
+    HashmapStr enumNameToId;
+    DynamicArray<HashmapStr*> enumElems;
     static HashmapStr structToOff;
     static ASTReturn defaultReturn;
     static HashmapStr loopLabels;
@@ -35,6 +37,8 @@ namespace check{
         u32 size = sizeof(Scope) * dep::lexers.count;
         globalScopes = (Scope*)mem::alloc(size);
         memset(globalScopes, 0, size);
+        enumNameToId.init();
+        enumElems.init();
         loopLabels.init();
         structToOff.init();
         initializerLists.init();
@@ -48,6 +52,8 @@ namespace check{
         structToOff.uninit();
         initializerLists.uninit();
         structEntities.uninit();
+        enumNameToId.uninit();
+        enumElems.uninit();
         for(u32 x=0; x<dep::lexers.count; x++) globalScopes[x].uninit();
         mem::free(globalScopes);
         for(u32 x=0; x<structScopes.count; x++) structScopes[x]->uninit();
@@ -262,8 +268,8 @@ Type checkTree(Lexer &lexer, ASTBase **nnode, DynamicArray<Scope*> &scopes, u32 
         if(implicitOk(treeType, typeCheck)){
             if(treeType == typeCheck || isCompType(treeType)) return typeCheck;
             //alloc a cast node and poke it for an implicit casting
-            cast = (ASTCast*)curASTFileForCastNodeAlloc->newNode(sizeof(ASTCast), ASTType::CAST, 0);
-            cast->targetType = (ASTTypeNode*)curASTFileForCastNodeAlloc->newNode(sizeof(ASTTypeNode), ASTType::TYPE, 0);
+            cast = (ASTCast*)curASTFileForCastAndEnumNodeAlloc->newNode(sizeof(ASTCast), ASTType::CAST, 0);
+            cast->targetType = (ASTTypeNode*)curASTFileForCastAndEnumNodeAlloc->newNode(sizeof(ASTTypeNode), ASTType::TYPE, 0);
             *nnode = (ASTBase*)cast;
             cast->srcType.zType = treeType;
             cast->srcType.pointerDepth = pointerDepth;
@@ -327,6 +333,23 @@ Type _checkTree(Lexer &lexer, ASTBase **nnode, DynamicArray<Scope*> &scopes, u32
         case ASTType::CHARACTER: type = Type::CHAR;break;
         case ASTType::INTEGER:   type = Type::COMP_INTEGER;break;
         case ASTType::DECIMAL:   type = Type::COMP_DECIMAL;break;
+        case ASTType::ENUM_AT:{
+                                  ASTEnumAt *at = (ASTEnumAt*)node;
+                                  u32 val;
+                                  if(check::enumNameToId.getValue(at->parent, &val) == false){
+                                      lexer.emitErr(at->tokenOff, "Parent enum not defined");
+                                      return Type::INVALID;
+                                  };
+                                  HashmapStr *map = check::enumElems[val];
+                                  if(map->getValue(at->elem, &val) == false){
+                                      lexer.emitErr(at->tokenOff, "Member not defined");
+                                      return Type::INVALID;
+                                  };
+                                  ASTNum *num = (ASTNum*)curASTFileForCastAndEnumNodeAlloc->newNode(sizeof(ASTNum), ASTType::INTEGER, 0);
+                                  num->integer = val;
+                                  *nnode = (ASTBase*)num;
+                                  type = Type::COMP_INTEGER;
+                              }break;
         case ASTType::ARRAY_AT:{
                                    ASTArrayAt *at = (ASTArrayAt*)node;
                                    u32 atPd;
@@ -897,6 +920,16 @@ bool checkASTNode(Lexer &lexer, ASTBase *node, DynamicArray<Scope*> &scopes){
                                     flow->relId = val;
                                 }else flow->relId = -1;
                             }break;
+        case ASTType::ENUM:{
+                               ASTEnum *Enum = (ASTEnum*)node;
+                               u32 val;
+                               if(check::enumNameToId.getValue(Enum->name, &val)){
+                                   lexer.emitErr(Enum->tokenOff, "Enum already defined");
+                                   return false;
+                               };
+                               check::enumNameToId.insertValue(Enum->name, check::enumElems.count);
+                               check::enumElems.push(&Enum->elems);
+                           }break;
         case ASTType::FOR:{
                               newId = checkFor((ASTFor*)node, scopes, lexer);
                               if(newId == 0) return false;
@@ -936,7 +969,7 @@ bool checkASTFile(Lexer &lexer, ASTFile &file, DynamicArray<ASTBase*> &globals){
     DEFER(scopes.uninit());
     for(u32 x=0; x<file.dependencies.count; x++) scopes.push(&check::globalScopes[file.dependencies[x]]);
     scopes.push(&scope);
-    curASTFileForCastNodeAlloc = &file;
+    curASTFileForCastAndEnumNodeAlloc = &file;
     for(u32 x=0; x<file.nodes.count; x++){
         if(!checkASTNode(lexer, file.nodes[x], scopes)) return false;
     };

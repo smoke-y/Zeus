@@ -32,6 +32,7 @@ namespace Word{
         {"break", TokType::K_BREAK},
         {"continue", TokType::K_CONT},
         {"ptr", TokType::K_PTR},
+        {"enum", TokType::K_ENUM},
     };
     const WordData poundwordsData[] = {
         {"import", TokType::P_IMPORT},

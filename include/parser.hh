@@ -32,6 +32,8 @@ enum class ASTType{
     CAST,
     BREAK,
     CONT,
+    ENUM,
+    ENUM_AT,
 
     B_START,  //binary operators start
     B_ADD,
@@ -136,6 +138,14 @@ struct ASTProcDefDecl : ASTBase{
     bool varArgs;
     u32 outputCount;
     u32 bodyCount;
+};
+struct ASTEnum : ASTBase{
+    String name;
+    HashmapStr elems;
+};
+struct ASTEnumAt : ASTBase{
+    String parent;
+    String elem;
 };
 struct ASTStruct : ASTBase{
     String name;

@@ -3,7 +3,27 @@
 #include "../include/genConfig.hh"
 #include <cstring>
 
-DynamicArray<ASTBase*> deferStatements;
+namespace parser{
+    struct MacroBody{
+        ASTBase **body;
+        u32 count;
+    };
+
+    DynamicArray<ASTBase*> deferStatements;
+    HashmapStr macroNameToId;
+    DynamicArray<MacroBody> macroBodies;
+
+    void init(){
+        deferStatements.init();
+        macroNameToId.init();
+        macroBodies.init();
+    };
+    void uninit(){
+        deferStatements.uninit();
+        macroNameToId.uninit();
+        macroBodies.uninit();
+    };
+};
 
 void ASTFile::init(u32 astId){
     id = astId;
@@ -328,14 +348,10 @@ ASTBase* _genASTExprTree(Lexer &lexer, ASTFile &file, u32 &xArg, u8 &bracketArg,
                                          pcall->args = argNodes;
                                          args.uninit();
                                          lhs = pcall;
-                                     }else if(tokTypes[x+1] == (TokType)':'){
-                                         x += 2;
-                                         if(tokTypes[x] != (TokType)':'){
-                                             lexer.emitErr(x, "Expected ':'");
-                                             return nullptr;
-                                         };
+                                     }else if(tokTypes[x+1] == (TokType)'\\'){
+                                         x++;
                                          ASTEnumAt *at = (ASTEnumAt*)file.newNode(sizeof(ASTEnumAt), ASTType::ENUM_AT, x);
-                                         at->parent = makeStringFromTokOff(x-2, lexer);
+                                         at->parent = makeStringFromTokOff(x-1, lexer);
                                          x++;
                                          if(tokTypes[x] != TokType::IDENTIFIER){
                                              lexer.emitErr(x, "Expected an identifier");
@@ -520,7 +536,7 @@ ASTBase** parseBody(Lexer &lexer, ASTFile &file, u32 &xArg, u32 &count, bool ins
     if(insertDefaultRet && (bodyTable[bodyTable.count-1]->type != ASTType::RETURN)){
         ASTReturn * ret = (ASTReturn*)file.newNode(sizeof(ASTReturn), ASTType::RETURN, x);
         ret->retCount = 0;
-        for(u32 i=0; i<deferStatements.count; i++) bodyTable.push(deferStatements[i]);
+        for(u32 i=0; i<parser::deferStatements.count; i++) bodyTable.push(parser::deferStatements[i]);
         bodyTable.push(ret);
     };
     u32 size = sizeof(ASTBase*) * bodyTable.count;
@@ -824,7 +840,7 @@ ASTProcDefDecl *parseProc(Lexer &lexer, ASTFile &file, u32 &xArg, bool isDecl){
     if(getBodyStartOrReportErr(x, lexer) == -1) return nullptr;
     u32 count;
     ASTBase **body = parseBody(lexer, file, x, count, proc->outputCount == 0);
-    deferStatements.count = 0;
+    parser::deferStatements.count = 0;
     if(body == nullptr) return nullptr;
     proc->body = body;
     proc->bodyCount = count;
@@ -872,6 +888,22 @@ bool parseBlock(Lexer &lexer, ASTFile &file, DynamicArray<ASTBase*> &table, u32 
                                    file.dependencies.push(stat);
                                    x++;
                                }break;
+        case TokType::P_MACRO:{
+                                  x++;
+                                  if(tokTypes[x] != TokType::IDENTIFIER){
+                                      lexer.emitErr(x, "Expected an identifier");
+                                      return false;
+                                  };
+                                  String name = makeStringFromTokOff(x, lexer);
+                                  u32 val;
+                                  if(parser::macroNameToId.getValue(name, &val) == false){
+                                      lexer.emitErr(x, "Macro not defined");
+                                      return false;
+                                  };
+                                  parser::MacroBody &mbody = parser::macroBodies[val];
+                                  for(u32 i=0; i<mbody.count; i++) table.push(mbody.body[i]);
+                                  x++;
+                              }break;
         case TokType::K_CONT:{
                                   ASTFlow *flow = (ASTFlow*)file.newNode(sizeof(ASTFlow), ASTType::CONT, x);
                                   x++;
@@ -894,7 +926,7 @@ bool parseBlock(Lexer &lexer, ASTFile &file, DynamicArray<ASTBase*> &table, u32 
                                       u32 start = x;
                                       x = eatNewLine(lexer.tokenTypes, x+1);
                                       while(tokTypes[x] != (TokType)'}'){
-                                          if(!parseBlock(lexer, file, deferStatements, x)) return false;
+                                          if(!parseBlock(lexer, file, parser::deferStatements, x)) return false;
                                           if(tokTypes[x] == TokType::END_OF_FILE){
                                               lexer.emitErr(start, "Expected closing '}'");
                                               return false;
@@ -903,10 +935,10 @@ bool parseBlock(Lexer &lexer, ASTFile &file, DynamicArray<ASTBase*> &table, u32 
                                       x++;
                                       break;
                                   };
-                                  if(!parseBlock(lexer, file, deferStatements, x)) return false;
+                                  if(!parseBlock(lexer, file, parser::deferStatements, x)) return false;
                               }break;
         case TokType::K_RETURN:{
-                                   for(u32 i=0; i<deferStatements.count; i++) table.push(deferStatements[i]);
+                                   for(u32 i=0; i<parser::deferStatements.count; i++) table.push(parser::deferStatements[i]);
                                    ASTReturn *ret = (ASTReturn*)file.newNode(sizeof(ASTReturn), ASTType::RETURN, x);
                                    s32 nend = getTokenOff((TokType)'\n', lexer, x);
                                    x++;
@@ -951,6 +983,22 @@ bool parseBlock(Lexer &lexer, ASTFile &file, DynamicArray<ASTBase*> &table, u32 
                                          //struct (or) proc (or) enum
                                          x += 3;
                                          switch(tokTypes[x]){
+                                             case TokType::K_MACRO:{
+                                                                       String name = makeStringFromTokOff(x-3, lexer);
+                                                                       u32 count;
+                                                                       u32 val;
+                                                                       if(parser::macroNameToId.getValue(name, &val)){
+                                                                           lexer.emitErr(x-3, "Macro redefinition");
+                                                                           return false;
+                                                                       };
+                                                                       x++;
+                                                                       ASTBase **body = parseBody(lexer, file, x, count);
+                                                                       if(body == nullptr) return false;
+                                                                       parser::macroNameToId.insertValue(name, parser::macroBodies.count);
+                                                                       parser::MacroBody &mbody = parser::macroBodies.newElem();
+                                                                       mbody.body = body;
+                                                                       mbody.count = count;
+                                                                   }break;
                                              case TokType::K_ENUM:{
                                                                       ASTEnum *Enum = parseEnum(lexer, file, x);
                                                                       if(Enum == nullptr) return false;

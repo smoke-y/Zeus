@@ -18,12 +18,12 @@ s32 main(s32 argc, char **argv){
     Word::init(Word::keywords, Word::keywordsData, ARRAY_LENGTH(Word::keywordsData));
     Word::init(Word::poundwords, Word::poundwordsData, ARRAY_LENGTH(Word::poundwordsData));
     dep::init();
-    deferStatements.init();
+    parser::init();
     DEFER({
             Word::uninit(Word::keywords);
             Word::uninit(Word::poundwords);
             dep::uninit();
-            deferStatements.uninit();
+            parser::uninit();
             mem::uninit();
             });
     s32 mainFileId = dep::insertFileToDepsAndInitLexer({inputPath, (u32)strlen(inputPath)});

@@ -11,6 +11,10 @@ days :: enum{
     SUNDAY,
     TUESDAY,
 }
+macroExample :: macro{
+    hehe := 32
+    printf("printf from an AST level macro\n")
+}
 
 trial :: proc(f: ^foo){
     f@x = 3
@@ -39,4 +43,9 @@ main :: proc(){
 
     trial(&f)
     printf("f.x: %d\n", f.x)
+
+    printf("days\\SUNDAY -> %d\n", days\SUNDAY)
+
+    #macro macroExample
+    printf("%d", hehe)
 }

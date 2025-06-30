@@ -45,6 +45,7 @@ enum class TokType {
     K_ELSE,
     K_TRUE,
     K_FALSE,
+    K_MACRO,
     K_END,       //keywords end
 
     P_START,     //poundwords start
@@ -52,6 +53,7 @@ enum class TokType {
     P_LINK,
     P_PROC_PTR,
     P_FILL,
+    P_MACRO,
     P_END,       //poundwords end
 };
 struct TokenOffset {

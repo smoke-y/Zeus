@@ -780,13 +780,18 @@ void lowerToLLVM(char *outputPath, DynamicArray<ASTBase*> &globals){
                         tempBuff[tmpCurs++] = '0';
                         tempBuff[tmpCurs++] = 'A';
                         x++;
-                        red++;
+                        red += 2;
+                    }else if(str.mem[x+1] == '\\'){
+                        tempBuff[tmpCurs++] = '\\';
+                        tempBuff[tmpCurs++] = '\\';
+                        x++;
+                        red += 1;
                     };
                 }else tempBuff[tmpCurs++] = str.mem[x];
             };
 DUMP_STRINGS:
             temp = snprintf(buff+cursor, BUFF_SIZE-cursor, "@.str.%d = private unnamed_addr constant [%d x i8] c\"%.*s\\00\"\n@str.%d = dso_local global ptr @.str.%d\n",
-                    val, str.len - red + 1, str.len + red, tempBuff, val, val);
+                    val, tmpCurs + 1 - red, tmpCurs, tempBuff, val, val);
             if(temp+cursor > BUFF_SIZE){
                 WRITE(file, buff, cursor);
                 cursor = 0;

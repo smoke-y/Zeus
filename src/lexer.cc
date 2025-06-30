@@ -33,12 +33,14 @@ namespace Word{
         {"continue", TokType::K_CONT},
         {"ptr", TokType::K_PTR},
         {"enum", TokType::K_ENUM},
+        {"macro", TokType::K_MACRO},
     };
     const WordData poundwordsData[] = {
         {"import", TokType::P_IMPORT},
         {"link", TokType::P_LINK},
         {"proc_ptr", TokType::P_PROC_PTR},
         {"fill", TokType::P_FILL},
+        {"macro", TokType::P_MACRO},
     };
     HashmapStr keywords;
     HashmapStr poundwords;

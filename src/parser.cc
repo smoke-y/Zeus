@@ -288,6 +288,15 @@ ASTBase* _genASTExprTree(Lexer &lexer, ASTFile &file, u32 &xArg, u8 &bracketArg,
     //build operand
     ASTBase *lhs;
     switch(tokTypes[x]){
+        case TokType::P_SIZEOF:{
+                                 if(tokTypes[++x] != TokType::IDENTIFIER){
+                                     lexer.emitErr(x, "Expected a string");
+                                     return nullptr;
+                                 };
+                                 ASTSizeof *size = (ASTSizeof*)file.newNode(sizeof(ASTSizeof), ASTType::SIZEOF, x);
+                                 size->name = makeStringFromTokOff(x, lexer);
+                                 lhs = (ASTBase*)size;
+                               }break;
         case (TokType)'$':{
                               ASTCast *cast = (ASTCast*)file.newNode(sizeof(ASTCast), ASTType::CAST, x++);
                               cast->child = _genASTExprTree(lexer, file, x, bracket, end);

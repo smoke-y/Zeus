@@ -47,5 +47,5 @@ main :: proc(){
     printf("days\\SUNDAY -> %d\n", days\SUNDAY)
 
     #macro macroExample
-    printf("%d", hehe)
+    printf("%d %d", hehe, #sizeof foo)
 }

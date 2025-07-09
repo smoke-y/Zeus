@@ -2,7 +2,7 @@
 #include "../include/lexer.hh"
 #include "../include/dependency.hh"
 
-static ASTFile *curASTFileForCastAndEnumNodeAlloc = nullptr;
+static ASTFile *curASTFileForCastOrEnumOrSizeofNodeAlloc = nullptr;
 
 void Scope::init(ScopeType stype, u32 id){
     type = stype;
@@ -268,8 +268,8 @@ Type checkTree(Lexer &lexer, ASTBase **nnode, DynamicArray<Scope*> &scopes, u32 
         if(implicitOk(treeType, typeCheck)){
             if(treeType == typeCheck || isCompType(treeType)) return typeCheck;
             //alloc a cast node and poke it for an implicit casting
-            cast = (ASTCast*)curASTFileForCastAndEnumNodeAlloc->newNode(sizeof(ASTCast), ASTType::CAST, 0);
-            cast->targetType = (ASTTypeNode*)curASTFileForCastAndEnumNodeAlloc->newNode(sizeof(ASTTypeNode), ASTType::TYPE, 0);
+            cast = (ASTCast*)curASTFileForCastOrEnumOrSizeofNodeAlloc->newNode(sizeof(ASTCast), ASTType::CAST, 0);
+            cast->targetType = (ASTTypeNode*)curASTFileForCastOrEnumOrSizeofNodeAlloc->newNode(sizeof(ASTTypeNode), ASTType::TYPE, 0);
             *nnode = (ASTBase*)cast;
             cast->srcType.zType = treeType;
             cast->srcType.pointerDepth = pointerDepth;
@@ -333,6 +333,19 @@ Type _checkTree(Lexer &lexer, ASTBase **nnode, DynamicArray<Scope*> &scopes, u32
         case ASTType::CHARACTER: type = Type::CHAR;break;
         case ASTType::INTEGER:   type = Type::COMP_INTEGER;break;
         case ASTType::DECIMAL:   type = Type::COMP_DECIMAL;break;
+        case ASTType::SIZEOF:{
+                                 ASTSizeof *size = (ASTSizeof*)node;
+                                 u32 val;
+                                 if(check::structToOff.getValue(size->name, &val) == false){
+                                     lexer.emitErr(size->tokenOff, "Struct %.*s not defined", size->name.len, size->name.mem);
+                                     return Type::INVALID;
+                                 };
+                                 StructEntity &ent = check::structEntities[val];
+                                 ASTNum *num = (ASTNum*)curASTFileForCastOrEnumOrSizeofNodeAlloc->newNode(sizeof(ASTNum), ASTType::INTEGER, 0);
+                                 num->integer = ent.size;
+                                 *nnode = (ASTBase*)num;
+                                 type = Type::COMP_INTEGER;
+                             }break;
         case ASTType::ENUM_AT:{
                                   ASTEnumAt *at = (ASTEnumAt*)node;
                                   u32 val;
@@ -345,7 +358,7 @@ Type _checkTree(Lexer &lexer, ASTBase **nnode, DynamicArray<Scope*> &scopes, u32
                                       lexer.emitErr(at->tokenOff, "Member not defined");
                                       return Type::INVALID;
                                   };
-                                  ASTNum *num = (ASTNum*)curASTFileForCastAndEnumNodeAlloc->newNode(sizeof(ASTNum), ASTType::INTEGER, 0);
+                                  ASTNum *num = (ASTNum*)curASTFileForCastOrEnumOrSizeofNodeAlloc->newNode(sizeof(ASTNum), ASTType::INTEGER, 0);
                                   num->integer = val;
                                   *nnode = (ASTBase*)num;
                                   type = Type::COMP_INTEGER;
@@ -599,7 +612,10 @@ u64 checkDecl(ASTAssDecl *assdecl, DynamicArray<Scope*> &scopes, Lexer &lexer, b
         };
     };
     if(typePointerDepth > 0) size = 64;
-    else size = getSize(lexer, typeType, assdecl->tokenOff);
+    else{
+        size = getSize(lexer, typeType, assdecl->tokenOff);
+        if(size == 0) return 0;
+    };
     for(u32 x=0; x<assdecl->lhsCount; x++){
         ASTBase *lhsNode = assdecl->lhs[x];
         if(lhsNode->type != ASTType::VARIABLE){
@@ -969,7 +985,7 @@ bool checkASTFile(Lexer &lexer, ASTFile &file, DynamicArray<ASTBase*> &globals){
     DEFER(scopes.uninit());
     for(u32 x=0; x<file.dependencies.count; x++) scopes.push(&check::globalScopes[file.dependencies[x]]);
     scopes.push(&scope);
-    curASTFileForCastAndEnumNodeAlloc = &file;
+    curASTFileForCastOrEnumOrSizeofNodeAlloc = &file;
     for(u32 x=0; x<file.nodes.count; x++){
         if(!checkASTNode(lexer, file.nodes[x], scopes)) return false;
     };

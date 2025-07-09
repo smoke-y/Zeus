@@ -41,6 +41,7 @@ namespace Word{
         {"proc_ptr", TokType::P_PROC_PTR},
         {"fill", TokType::P_FILL},
         {"macro", TokType::P_MACRO},
+        {"sizeof", TokType::P_SIZEOF},
     };
     HashmapStr keywords;
     HashmapStr poundwords;

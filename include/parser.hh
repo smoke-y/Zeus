@@ -34,6 +34,7 @@ enum class ASTType{
     CONT,
     ENUM,
     ENUM_AT,
+    SIZEOF,
 
     B_START,  //binary operators start
     B_ADD,
@@ -75,6 +76,9 @@ struct ASTBinOp : ASTBase{
         bool hasBracket;
         ASTTypeNode zType;
     };
+};
+struct ASTSizeof : ASTBase{
+    String name;
 };
 struct ASTUnOp : ASTBase{
     ASTTypeNode childType;

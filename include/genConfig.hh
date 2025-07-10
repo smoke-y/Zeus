@@ -16,8 +16,7 @@ static char *LinkConfigCLibsToStr[] = {
 struct GenConfig{
     u32 linkCLibs;
     u8 optimzation;
+    bool isSharedLib;
 };
-
-void initGenConfig();
 
 extern GenConfig genConfig;

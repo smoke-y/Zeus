@@ -153,7 +153,7 @@ s32 howCast(ASTTypeNode *n1, ASTTypeNode *n2){
     Type t1 = n1->zType;
     Type t2 = n2->zType;
     s32 ret = -1;
-    if(t2 > t1){
+    if(t2 > t1 || isCompType(t2)){
         Type temp = t2;
         t2 = t1;
         t1 = temp;

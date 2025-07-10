@@ -1006,15 +1006,17 @@ bool checkASTFile(Lexer &lexer, ASTFile &file, DynamicArray<ASTBase*> &globals){
                                               lexer.emitErr(assdecl->tokenOff, "In the global scope, lhs has to be a variable");
                                               return false;
                                           };
-                                          switch(assdecl->rhs->type){
-                                              case ASTType::INTEGER:
-                                              case ASTType::DECIMAL:
-                                              case ASTType::CHARACTER:
-                                              case ASTType::STRING: break;
-                                              default:{
-                                                          lexer.emitErr(assdecl->tokenOff, "In the global scope, rhs has to be an integer, decimal, character or a string. No expressions allowed");
-                                                          return false;
-                                                      }break;
+                                          if(assdecl->rhs){
+                                              switch(assdecl->rhs->type){
+                                                  case ASTType::INTEGER:
+                                                  case ASTType::DECIMAL:
+                                                  case ASTType::CHARACTER:
+                                                  case ASTType::STRING: break;
+                                                  default:{
+                                                              lexer.emitErr(assdecl->tokenOff, "In the global scope, rhs has to be an integer, decimal, character or a string. No expressions allowed");
+                                                              return false;
+                                                          }break;
+                                              };
                                           };
                                           for(u32 y=curFileOff; y<dep::fileToId.count-1; y++){
                                               const u32 fileOff = y+1;

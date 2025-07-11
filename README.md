@@ -7,6 +7,14 @@ swap :: proc(x,y :u32) -> (u32, u32){
     return y, x
 }
 
+compTimeProc :: proc #comptime (){
+    //This will print the license while compiling
+    license("LICENSE.txt")
+
+    log("This is being printed from a procedure being executed at compile time")
+    log("The VM executing the bytecodes is bootstrapped and written in Zeus!")
+}
+
 #link "libc"
 
 printf :: proc_decl(^char, ...)

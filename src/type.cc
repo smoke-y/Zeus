@@ -29,6 +29,9 @@ Type convertFromComptype(Type type){
     if(type == Type::COMP_DECIMAL) return Type::F64;
     return type;
 };
+Type tokTypeToZeusType(TokType type){
+    return (Type)((u32)type - (u32)TokType::K_TYPE_START + (u32)(Type::Z_TYPE_START));
+}
 inline char *typeToStr(Type type){return typeToStrTable[(u32)type];};
 bool isNumber(Type type) {return (type >= Type::U8 && type <= Type::F64) || type == Type::COMP_INTEGER || type == Type::COMP_DECIMAL;}
 bool isSigned(Type type){

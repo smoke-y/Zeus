@@ -2,6 +2,7 @@
 #include "../include/genConfig.hh"
 #include <cstdio>
 #include <cstring>
+#include <execution>
 
 GenConfig genConfig;
 
@@ -12,6 +13,7 @@ s32 main(s32 argc, char **argv){
     };
     mem::init();
     char *inputPath = argv[1];
+    char *outPath = "bin/out";
     //TODO: parse arguments 
     genConfig.linkCLibs = 0;
     genConfig.optimzation = 0;
@@ -19,6 +21,9 @@ s32 main(s32 argc, char **argv){
 
     if(argc > 3){
         if(strcmp(argv[3], "-shared") == 0) genConfig.isSharedLib = true;
+    };
+    if(argc >= 2){
+        outPath = argv[2];
     };
 
     Word::init(Word::keywords, Word::keywordsData, ARRAY_LENGTH(Word::keywordsData));
@@ -48,10 +53,15 @@ s32 main(s32 argc, char **argv){
         ASTFile &file = dep::astFiles.newElem();
         file.init(x);
         if(!parseFile(lexer, file)){
-            printf("LSKJDF");
             report::flushReports();
             return EXIT_FAILURE;
         };
+    };
+
+    if(parser::compProcs.count){
+        loadVM();
+        lowerToBytecodeAndExecOnVM(parser::compProcs);
+        unloadVM();
     };
 
     check::init();
@@ -98,7 +108,7 @@ s32 main(s32 argc, char **argv){
     if(genConfig.isSharedLib){
         curs += snprintf(instrBuff+curs, 1025-curs, "-fPIC -shared ");
     };
-    snprintf(instrBuff+curs, 1025-curs, "bin/out.ll -o %s", genConfig.isSharedLib?"bin/out.so":"bin/out");
+    snprintf(instrBuff+curs, 1025-curs, "bin/out.ll -o %s", outPath);
     printf("[+] %s\n", instrBuff);
     system(instrBuff);
     return EXIT_SUCCESS;

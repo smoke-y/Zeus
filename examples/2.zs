@@ -1,6 +1,14 @@
 #import "lib/io.zs"
 #import "lib/mem.zs"
 
+compTimeProc :: proc #comptime (){
+    //This will print the license while compiling
+    license("LICENSE.txt")
+
+    log("This is being printed from a procedure being executed at compile time")
+    log("The VM executing the bytecodes is bootstrapped and written in Zeus!")
+}
+
 main :: proc(){
     x: u32
     printf("enter an integer: ")

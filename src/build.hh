@@ -31,4 +31,5 @@
 #include "parser.cc"
 #include "dependency.cc"
 #include "checker.cc"
+#include "vm.cc"
 #include "llvm.cc"

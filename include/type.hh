@@ -28,6 +28,7 @@ enum class Type{
 };
 
 Type convertFromComptype(Type type);
+Type tokTypeToZeusType(TokType type);
 char *typeToStr(Type type);
 bool isSigned(Type type);
 bool isCompType(Type type);

@@ -42,6 +42,7 @@ namespace Word{
         {"fill", TokType::P_FILL},
         {"macro", TokType::P_MACRO},
         {"sizeof", TokType::P_SIZEOF},
+        {"comptime", TokType::P_COMPTIME},
     };
     HashmapStr keywords;
     HashmapStr poundwords;

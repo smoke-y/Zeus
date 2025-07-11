@@ -4,24 +4,22 @@
 #include <cstring>
 
 namespace parser{
-    struct MacroBody{
-        ASTBase **body;
-        u32 count;
-    };
-
     DynamicArray<ASTBase*> deferStatements;
     HashmapStr macroNameToId;
     DynamicArray<MacroBody> macroBodies;
+    DynamicArray<MacroBody> compProcs;
 
     void init(){
         deferStatements.init();
         macroNameToId.init();
         macroBodies.init();
+        compProcs.init();
     };
     void uninit(){
         deferStatements.uninit();
         macroNameToId.uninit();
         macroBodies.uninit();
+        compProcs.uninit();
     };
 };
 
@@ -289,13 +287,18 @@ ASTBase* _genASTExprTree(Lexer &lexer, ASTFile &file, u32 &xArg, u8 &bracketArg,
     ASTBase *lhs;
     switch(tokTypes[x]){
         case TokType::P_SIZEOF:{
-                                 if(tokTypes[++x] != TokType::IDENTIFIER){
-                                     lexer.emitErr(x, "Expected a string");
-                                     return nullptr;
-                                 };
-                                 ASTSizeof *size = (ASTSizeof*)file.newNode(sizeof(ASTSizeof), ASTType::SIZEOF, x);
-                                 size->name = makeStringFromTokOff(x, lexer);
-                                 lhs = (ASTBase*)size;
+                                   x++;
+                                   ASTSizeof *size = (ASTSizeof*)file.newNode(sizeof(ASTSizeof), ASTType::SIZEOF, x);
+                                   if(tokTypes[x] == TokType::IDENTIFIER){
+                                       size->name = makeStringFromTokOff(x, lexer);
+                                   }else if(isType(tokTypes[x])){
+                                       size->name.mem = nullptr;
+                                       size->name.len = (u32)tokTypeToZeusType(tokTypes[x]);
+                                   }else{
+                                       lexer.emitErr(x, "Expected a struct/type");
+                                       return nullptr;
+                                   };
+                                   lhs = (ASTBase*)size;
                                }break;
         case (TokType)'$':{
                               ASTCast *cast = (ASTCast*)file.newNode(sizeof(ASTCast), ASTType::CAST, x++);
@@ -749,11 +752,17 @@ ASTStruct *parseStruct(Lexer &lexer, ASTFile &file, u32 &xArg){
     Struct->bodyCount = count;
     return Struct;
 };
-ASTProcDefDecl *parseProc(Lexer &lexer, ASTFile &file, u32 &xArg, bool isDecl){
+ASTProcDefDecl *parseProc(Lexer &lexer, ASTFile &file, u32 &xArg, bool isDecl, bool &isComp){
     BRING_TOKENS_TO_SCOPE;
     u32 x = xArg;
     DEFER(xArg = x);
-    if(tokTypes[++x] != (TokType)'('){
+    x++;
+    isComp = false;
+    if(tokTypes[x] == TokType::P_COMPTIME){
+        x++;
+        isComp = true;
+    }
+    if(tokTypes[x] != (TokType)'('){
         lexer.emitErr(x, "Expected '('");
         return nullptr;
     };
@@ -853,6 +862,10 @@ ASTProcDefDecl *parseProc(Lexer &lexer, ASTFile &file, u32 &xArg, bool isDecl){
     if(body == nullptr) return nullptr;
     proc->body = body;
     proc->bodyCount = count;
+    parser::MacroBody mbody;
+    mbody.body = body;
+    mbody.count = count;
+    parser::compProcs.push(mbody);
     return proc;
 };
 
@@ -1019,14 +1032,16 @@ bool parseBlock(Lexer &lexer, ASTFile &file, DynamicArray<ASTBase*> &table, u32 
                                                                         table.push(Struct);
                                                                     }break;
                                              case TokType::K_PROC_DECL:{
-                                                                           ASTProcDefDecl *proc = parseProc(lexer, file, x, true);
+                                                                           bool isComp;
+                                                                           ASTProcDefDecl *proc = parseProc(lexer, file, x, true, isComp);
                                                                            if(proc == nullptr) return false;
-                                                                           table.push(proc);
+                                                                           if(isComp == false) table.push(proc);
                                                                        }break;
                                              case TokType::K_PROC_DEF:{
-                                                                          ASTProcDefDecl *proc = parseProc(lexer, file, x, false);
+                                                                          bool isComp;
+                                                                          ASTProcDefDecl *proc = parseProc(lexer, file, x, false, isComp);
                                                                           if(proc == nullptr) return false;
-                                                                          table.push(proc);
+                                                                          if(isComp == false) table.push(proc);
                                                                       }break;
                                          };
                                          return true;

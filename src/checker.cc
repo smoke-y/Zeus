@@ -124,7 +124,7 @@ ProcEntity *getProcEntity(String name, DynamicArray<Scope*> &scopes){
 bool fillTypeInfo(Lexer &lexer, ASTTypeNode *node){
     BRING_TOKENS_TO_SCOPE;
     if(isType(tokTypes[node->tokenOff])){
-        node->zType = (Type)((u32)tokTypes[node->tokenOff] - (u32)TokType::K_TYPE_START + (u32)(Type::Z_TYPE_START));
+        node->zType = tokTypeToZeusType(tokTypes[node->tokenOff]);
         if(node->zType == Type::PTR){
             if(node->pointerDepth > 0){
                 lexer.emitErr(node->tokenOff, "rawptr has to have pointer depth 0");
@@ -335,14 +335,18 @@ Type _checkTree(Lexer &lexer, ASTBase **nnode, DynamicArray<Scope*> &scopes, u32
         case ASTType::DECIMAL:   type = Type::COMP_DECIMAL;break;
         case ASTType::SIZEOF:{
                                  ASTSizeof *size = (ASTSizeof*)node;
-                                 u32 val;
-                                 if(check::structToOff.getValue(size->name, &val) == false){
-                                     lexer.emitErr(size->tokenOff, "Struct %.*s not defined", size->name.len, size->name.mem);
-                                     return Type::INVALID;
-                                 };
-                                 StructEntity &ent = check::structEntities[val];
                                  ASTNum *num = (ASTNum*)curASTFileForCastOrEnumOrSizeofNodeAlloc->newNode(sizeof(ASTNum), ASTType::INTEGER, 0);
-                                 num->integer = ent.size;
+                                 if(size->name.mem != nullptr){
+                                     u32 val;
+                                     if(check::structToOff.getValue(size->name, &val) == false){
+                                         lexer.emitErr(size->tokenOff, "Struct %.*s not defined", size->name.len, size->name.mem);
+                                         return Type::INVALID;
+                                     };
+                                     StructEntity &ent = check::structEntities[val];
+                                     num->integer = ent.size;
+                                 }else{
+                                     num->integer = getSize(lexer, (Type)size->name.len, size->tokenOff);
+                                 };
                                  *nnode = (ASTBase*)num;
                                  type = Type::COMP_INTEGER;
                              }break;

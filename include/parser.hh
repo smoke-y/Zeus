@@ -78,6 +78,7 @@ struct ASTBinOp : ASTBase{
     };
 };
 struct ASTSizeof : ASTBase{
+    //if .mem == nullptr, then .len has the type
     String name;
 };
 struct ASTUnOp : ASTBase{
@@ -220,3 +221,10 @@ struct ASTFile{
 String makeStringFromTokOff(u32 x, Lexer &lexer);
 
 extern DynamicArray<ASTBase*> deferStatements;
+
+namespace parser{
+    struct MacroBody{
+        ASTBase **body;
+        u32 count;
+    };
+};

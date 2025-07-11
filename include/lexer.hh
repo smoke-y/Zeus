@@ -55,6 +55,7 @@ enum class TokType {
     P_FILL,
     P_MACRO,
     P_SIZEOF,
+    P_COMPTIME,
     P_END,       //poundwords end
 };
 struct TokenOffset {

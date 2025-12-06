@@ -1,7 +1,5 @@
 # The Zeus Programming Language
 
-<img src="logo.jpeg">
-
 ```
 swap :: proc(x,y :u32) -> (u32, u32){
     return y, x

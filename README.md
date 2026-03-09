@@ -35,4 +35,21 @@ main :: proc(){
 }
 ```
 
-read about it: http://smoke-y.github.io/articles/zeus.html
+### About
+
+A systems programming language aimed to fix shortcomings of C. Zeus supports <br>
+<ul>
+<li>compile time execution(limited)</li>
+<li>named loops</li>
+<li>defer</li>
+<li>multiple return</li>
+</ul>
+and many more. read about it: http://smoke-y.github.io/articles/zeus.html
+
+### Installation
+Clone the repo and run the build script. Since the compiler is written from scratch, it has almost no dependencies. The compiler
+directly outputs LLVM IR, hence you dont need to build LLVM. All you need is the clang compiler which will compile the Zeus compiler
+and lower LLMV IR output by Zeus compiler.<br>
+
+If you want compile time execution, you will have to compile https://github.com/smoke-y/Aetos using the Zeus compiler(pass the
+dynamic library flag) and you can load the VM on your next compilation to execute Zeus bytecodes.

@@ -865,7 +865,7 @@ ASTProcDefDecl *parseProc(Lexer &lexer, ASTFile &file, u32 &xArg, bool isDecl, b
     parser::MacroBody mbody;
     mbody.body = body;
     mbody.count = count;
-    parser::compProcs.push(mbody);
+    if(isComp) parser::compProcs.push(mbody);
     return proc;
 };
 

@@ -19,11 +19,9 @@ s32 main(s32 argc, char **argv){
     genConfig.optimzation = 0;
     genConfig.isSharedLib = false;
 
-    if(argc > 3){
-        if(strcmp(argv[3], "-shared") == 0) genConfig.isSharedLib = true;
-    };
-    if(argc >= 2){
-        outPath = argv[2];
+    for(int i=0; i<argc; i++){
+        if(strcmp(argv[i], "-shared") == 0) genConfig.isSharedLib = true;
+        if(strcmp(argv[i], "-out") == 0) outPath = argv[i+1];
     };
 
     Word::init(Word::keywords, Word::keywordsData, ARRAY_LENGTH(Word::keywordsData));

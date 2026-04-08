@@ -262,21 +262,26 @@ u32 lowerExpression(ASTBase *root, LLVMFile &file, Type type){
         case ASTType::CAST:{
                                ASTCast *cast = (ASTCast*)root;
                                u32 childReg = lowerExpression(cast->child, file);
+                               u32 tempReg = file.newReg();
                                char *srcType = getLLVMType(&cast->srcType);
                                char *tarType = getLLVMType(cast->targetType);
-                               s32 typeStat = howCast(&cast->srcType, cast->targetType);
-                               char *func = nullptr;
-                               switch(typeStat){
+                               if((u32)cast->srcType.zType == 17 && (u32)cast->targetType->zType == 4 || 
+                                  (u32)cast->srcType.zType == 4  && (u32)cast->targetType->zType == 17){
+                                   file.write("%%t%d = load i64, ptr %%e%d\n", tempReg, childReg);
+                               }else{
+                                 s32 typeStat = howCast(&cast->srcType, cast->targetType);
+                                 char *func = nullptr;
+                                 switch(typeStat){
                                    case -1:func = "trunc";break;
                                    case 1: func = "zext";break;
                                    case 2: func = "sext";break;
-                               }
-                               u32 tempReg = file.newReg();
-                               file.write("%%t%d = load %s, ptr %%e%d\n", tempReg, srcType, childReg);
-                               if(func){
+                                 }
+                                 file.write("%%t%d = load %s, ptr %%e%d\n", tempReg, srcType, childReg);
+                                 if(func){
                                    u32 castReg = file.newReg();
                                    file.write("%%t%d = %s %s %%t%d to %s\n", castReg, func, srcType, tempReg, tarType);
                                    tempReg = castReg;
+                                 };
                                };
                                file.write("%%e%d = alloca %s\n", reg, tarType);
                                file.write("store %s %%t%d, ptr %%e%d\n", tarType, tempReg, reg);
